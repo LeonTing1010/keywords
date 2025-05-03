@@ -1,0 +1,26 @@
+{
+  "name": "keywords",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "google-keywords": "ts-node googleKeywords.ts",
+    "keywords": "ts-node keywordsTool.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "多平台关键词搜索建议工具",
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.3"
+  },
+  "dependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "fs-extra": "^11.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "bin": {
+    "keywords": "./keywordsTool.ts"
+  }
+}
