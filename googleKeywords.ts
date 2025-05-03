@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { fetchAutocompleteWithAlphabets } from './src/scrapers/googleAutocomplete';
+import { GoogleSearchEngine } from './src/scrapers/GoogleSearchEngine';
+import { SearchOptions } from './src/types';
 
 /**
  * 使用说明
@@ -77,26 +78,37 @@ async function main() {
     } else {
       console.log('已禁用二次查询');
     }
+
+    // 创建Google搜索引擎实例
+    const engine = new GoogleSearchEngine();
     
-    // 调用我们的函数
-    const outputFile = await fetchAutocompleteWithAlphabets(
-      keyword,
-      googleDomain,
+    // 配置搜索选项
+    const searchOptions: SearchOptions = {
+      domain: googleDomain,
       proxyServer,
       useSystemBrowser,
       enableSecondRound
-    );
+    };
+    
+    // 调用搜索引擎的方法
+    const outputFile = await engine.fetchAutocompleteWithAlphabets(keyword, searchOptions);
     
     console.log(`\n处理完成! 结果保存在: ${outputFile}`);
     
     if (enableSecondRound) {
       // 提取输出目录和文件名
-      const outputDir = require('path').dirname(outputFile);
+      const path = require('path');
+      const fs = require('fs');
+      
+      const outputDir = path.dirname(outputFile);
       const safeKeyword = keyword.replace(/\s+/g, '_');
-      const secondRoundFile = require('path').join(outputDir, `${safeKeyword}_second_round_suggestions.txt`);
+      const secondRoundFile = path.join(
+        outputDir, 
+        `google_${safeKeyword}_second_round_suggestions.txt`
+      );
       
       // 检查二次查询结果文件是否存在
-      if (require('fs').existsSync(secondRoundFile)) {
+      if (fs.existsSync(secondRoundFile)) {
         console.log(`二次查询结果保存在: ${secondRoundFile}`);
       }
     }
