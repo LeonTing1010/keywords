@@ -565,7 +565,7 @@ export async function fetchTrends(
     console.log('点击下载按钮...');
     
     try {
-      await downloadButton.click();
+    await downloadButton.click();
     } catch (error: any) {
       console.log(`点击下载按钮失败: ${error?.message || '未知错误'}，尝试使用JavaScript点击`);
       
@@ -585,7 +585,7 @@ export async function fetchTrends(
     console.log('等待文件下载(最多60秒)...');
     try {
       const download = await page.waitForEvent('download', { timeout: 60000 });
-      await download.saveAs(savePath);
+    await download.saveAs(savePath);
       console.log('文件下载成功!');
     } catch (downloadError: any) {
       console.log(`下载事件等待超时: ${downloadError?.message || '未知错误'}`);
