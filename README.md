@@ -9,6 +9,10 @@
 - **自动补全搜索**: 从搜索引擎获取关键词自动补全建议
 - **字母组合查询**: 将关键词与字母组合进行查询，获取更多建议
 - **智能二次查询**: 从初始结果中提取二次关键词进行拓展查询
+- **LLM增强分析**: 使用大语言模型分析关键词价值和意图
+- **迭代优化查询**: 基于评估分数持续优化并挖掘更有价值的长尾词
+- **关键词分类**: 自动将关键词分类为信息查询、问题解决、商业交易等类别
+- **价值评分**: 根据长尾特征、商业价值等维度评分关键词
 - **断点续传**: 支持长时间任务的断点续传功能
 - **批量处理**: 智能管理浏览器资源，批量处理查询
 - **格式转换**: 自动保存为JSON和CSV格式，方便后续分析
@@ -37,7 +41,14 @@
 │   ├── utils/                # 工具函数
 │   │   ├── browserUtils.ts   # 浏览器相关工具
 │   │   ├── fileUtils.ts      # 文件操作工具
-│   │   └── errorHandler.ts   # 错误处理工具
+│   │   ├── errorHandler.ts   # 错误处理工具
+│   │   ├── llmService.ts     # LLM服务模块
+│   │   ├── keywordAnalyzer.ts # 关键词分析模块
+│   │   ├── iterativeQueryEngine.ts # 迭代查询引擎
+│   │   └── ...                # 其他工具模块
+│   ├── config/                # 配置文件
+│   │   ├── index.ts           # 主配置文件
+│   │   └── ...                # 其他配置文件
 │   └── tests/                # 测试目录
 ├── keywordsTool.ts           # 主入口文件
 └── playwright.config.ts      # Playwright配置
@@ -87,6 +98,11 @@ npx ts-node keywordsTool.ts "关键词" [选项]
 - `--max-results <数量>` - 二次查询最大结果数(默认: 300)
 - `--output, -o <文件名>` - 指定输出文件名
 - `--help, -h` - 显示帮助信息
+- `--use-llm` - 使用LLM增强分析功能
+- `--llm-model <模型名称>` - 指定LLM模型(默认: gpt-4)
+- `--iterative` - 启用迭代查询模式
+- `--max-iterations <次数>` - 最大迭代次数(默认: 5)
+- `--satisfaction-threshold <值>` - 满意度阈值(0-1之间，默认: 0.85)
 
 ### 示例
 
@@ -117,6 +133,15 @@ npx ts-node keywordsTool.ts "yoga" --secondary-mode both --batch-size 15 --max-r
 
 # 提高重试次数，应对不稳定网络
 npx ts-node keywordsTool.ts "javascript" --retry-count 3
+
+# 使用LLM分析关键词
+npx ts-node keywordsTool.ts "machine learning" --use-llm
+
+# 使用迭代查询模式
+npx ts-node keywordsTool.ts "web design" --iterative --max-iterations 3
+
+# 结合LLM和迭代查询
+npx ts-node keywordsTool.ts "digital marketing" --iterative --use-llm --max-iterations 4
 ```
 
 ## 二次查询模式
@@ -198,4 +223,123 @@ SearchEngineFactory.register('bing', BingSearchEngine);
 
 - 部分搜索引擎可能需要处理验证码，工具会提示您手动处理
 - 使用代理服务器可以避免IP被封禁
-- 建议使用系统浏览器模式，可以利用已登录的会话减少验证码出现 
+- 建议使用系统浏览器模式，可以利用已登录的会话减少验证码出现
+
+## LLM关键词分析
+
+工具集成了大语言模型(LLM)能力，可以对关键词进行深度分析和评估，帮助您发现最有价值的长尾关键词。
+
+### 使用LLM分析功能
+
+```bash
+npx ts-node keywordsTool.ts "your keyword" --use-llm
+```
+
+或使用简化的快捷命令：
+
+```bash
+npm run analyze -- "your keyword"
+```
+
+### LLM分析功能包括：
+
+1. **关键词分类**：
+   - 自动将关键词分类为信息查询、问题解决、商业交易、教程指南和定义解释等类别
+   - 帮助您理解搜索意图分布
+
+2. **高价值关键词识别**：
+   - 基于多维度评分识别最有价值的长尾关键词
+   - 考虑长尾特征、商业价值、问题导向等因素
+
+3. **查询模式提取**：
+   - 识别用户搜索模式和常见修饰词
+   - 帮助您理解用户如何构建查询
+
+4. **查询策略生成**：
+   - 自动生成下一轮查询建议
+   - 帮助您发现更多相关长尾关键词
+
+### 注意事项
+
+- 此功能需要OpenAI API密钥，可以通过环境变量`OPENAI_API_KEY`设置
+- 默认使用gpt-4模型，可以通过`--llm-model`选项指定其他模型
+- LLM分析结果会包含在输出文件中
+
+## 迭代查询引擎
+
+迭代查询引擎是一个强大的功能，可以持续优化关键词查询，并自动挖掘更有价值的长尾关键词。它通过多轮迭代，每轮评估结果并调整策略，直到达到满意的结果。
+
+### 使用迭代查询引擎
+
+```bash
+npx ts-node keywordsTool.ts "your keyword" --iterative
+```
+
+或使用简化的快捷命令：
+
+```bash
+npm run iterative -- "your keyword"
+```
+
+### 高级选项：
+
+```bash
+npx ts-node keywordsTool.ts "your keyword" --iterative --max-iterations 4 --satisfaction-threshold 0.9
+```
+
+### 迭代查询过程：
+
+1. **初始查询**：
+   - 首先执行全面的初始查询，获取基础关键词集合
+
+2. **结果分析**：
+   - 分析当前关键词集合，识别模式和空缺
+
+3. **策略生成**：
+   - 基于分析结果生成针对性的查询策略
+   - 选择最有可能发现高价值长尾词的查询
+
+4. **执行迭代查询**：
+   - 执行策略生成的查询
+   - 将新发现的关键词添加到总集合
+
+5. **满意度评估**：
+   - 对迭代结果进行多维度评分
+   - 评估长尾价值、商业价值、相关性等
+
+6. **决策点**：
+   - 如果满意度达到阈值，或已达到最大迭代次数，则停止
+   - 否则，继续下一轮迭代
+
+7. **最终报告**：
+   - 生成全面的分析报告
+   - 提供高价值关键词推荐和内容机会
+
+### 迭代查询输出：
+
+迭代查询完成后，会生成三种格式的输出：
+- **JSON文件**：包含完整的迭代过程和分析结果
+- **CSV文件**：所有发现的关键词列表，便于导入电子表格
+- **Markdown报告**：可读性强的分析报告，包含关键词分类、高价值推荐和内容机会
+
+### 最佳实践：
+
+- 对于广泛主题，建议设置较高的`max-iterations`值(4-5)
+- 对于特定领域，可以设置较高的`satisfaction-threshold`(0.9)以获取更精确的结果
+- 结合`--use-llm`选项可以获得更深入的分析
+- 对于英文关键词，结果通常更全面，中文关键词也得到良好支持
+
+## 环境变量配置
+
+工具支持通过环境变量进行配置，特别是对于LLM相关功能：
+
+- `OPENAI_API_KEY`：OpenAI API密钥，用于LLM分析和迭代查询
+- `DEBUG`：设置为"true"启用调试日志
+- `VERBOSE`：设置为"true"启用详细日志
+- `LOG_LEVEL`：日志级别，可选值：debug, info, warn, error
+- `OUTPUT_DIR`：输出目录路径
+
+示例：
+
+```bash
+OPENAI_API_KEY=your_key npx ts-node keywordsTool.ts "ai tools" --use-llm 

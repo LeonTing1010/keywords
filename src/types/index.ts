@@ -5,6 +5,7 @@
 
 // 重新导出搜索引擎相关类型
 export * from './searchEngineTypes';
+export * from './llmTypes';
 
 // 其他类型定义
 

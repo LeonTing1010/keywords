@@ -14,6 +14,7 @@ export enum ErrorType {
   VALIDATION = 'VALIDATION_ERROR',
   FILE_SYSTEM = 'FILE_SYSTEM_ERROR',
   PROCESS = 'PROCESS_ERROR',
+  API = 'API_ERROR',
   UNKNOWN = 'UNKNOWN_ERROR'
 }
 
@@ -78,6 +79,9 @@ export function handleError(error: any, context?: string): void {
       break;
     case ErrorType.PROCESS:
       console.error('💡 建议: 处理过程中出错，请检查输入数据或查看日志了解详情');
+      break;
+    case ErrorType.API:
+      console.error('💡 建议: API调用失败，请检查API密钥、请求参数或服务可用性');
       break;
     default:
       console.error('💡 建议: 请尝试重新运行程序，如果问题持续存在，请报告此错误');

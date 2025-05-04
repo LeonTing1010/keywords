@@ -11,19 +11,31 @@
     "debug:tools": "./debug-tools.sh",
     "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
     "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
-    "debug:secondary": "DEBUG=true ts-node src/tools/debug-secondaryQuery.ts"
+    "debug:secondary": "DEBUG=true ts-node src/tools/debug-secondaryQuery.ts",
+    "iterative": "ts-node keywordsTool.ts --iterative",
+    "analyze": "ts-node keywordsTool.ts --use-llm"
   },
-  "keywords": [],
+  "keywords": [
+    "seo",
+    "keywords",
+    "long-tail",
+    "autocomplete",
+    "search-suggestions"
+  ],
   "author": "",
   "license": "ISC",
   "description": "多平台关键词搜索建议工具",
   "devDependencies": {
     "@playwright/test": "^1.52.0",
+    "@types/axios": "^0.14.0",
+    "@types/handlebars": "^4.1.0",
     "@types/node": "^22.15.3"
   },
   "dependencies": {
     "@types/fs-extra": "^11.0.4",
+    "axios": "^1.9.0",
     "fs-extra": "^11.3.0",
+    "handlebars": "^4.7.8",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },

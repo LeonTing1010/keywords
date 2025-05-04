@@ -12,6 +12,10 @@ import { SecondaryQueryManager } from '../utils/secondaryQueryManager';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ensureOutputDirectory } from '../utils/fileUtils';
+import { IterativeQueryEngine } from '../utils/iterativeQueryEngine';
+import { LLMService } from '../utils/llmService';
+import { KeywordAnalyzer } from '../utils/keywordAnalyzer';
+import { config } from '../config';
 
 // 创建搜索引擎实例的工厂函数
 function createSearchEngine(type: SearchEngineType) {
@@ -54,6 +58,13 @@ function printHelp() {
   --output, -o <文件名>      指定输出文件名
   --help, -h                 显示帮助信息
 
+高级选项:
+  --use-llm                  使用LLM增强分析功能
+  --llm-model <模型名称>     指定LLM模型(默认: gpt-4)
+  --iterative                启用迭代查询模式
+  --max-iterations <次数>    最大迭代次数(默认: 5)
+  --satisfaction-threshold <值>  满意度阈值(0-1之间，默认: 0.85)
+
 示例:
   npx ts-node keywordsCli.ts "iphone"                     # 默认使用Google搜索引擎
   npx ts-node keywordsCli.ts "web design" --secondary-mode keywords  # 使用关键词模式进行二次查询
@@ -61,6 +72,11 @@ function printHelp() {
   npx ts-node keywordsCli.ts "best laptops" --proxy http://127.0.0.1:7890 --temp-browser
   npx ts-node keywordsCli.ts "android" --no-second-round
   npx ts-node keywordsCli.ts "yoga" --secondary-mode both --batch-size 15
+  
+高级示例:
+  npx ts-node keywordsCli.ts "web design" --iterative --max-iterations 3  # 使用迭代查询模式
+  npx ts-node keywordsCli.ts "machine learning" --use-llm                 # 使用LLM增强分析
+  npx ts-node keywordsCli.ts "digital marketing" --iterative --use-llm    # 结合LLM和迭代查询
   `);
 }
 
@@ -80,6 +96,11 @@ function parseArguments(args: string[]): {
   retryCount?: number;
   maxSecondaryKeywords?: number;
   maxResults?: number;
+  useLLM: boolean;
+  llmModel: string;
+  enableIterative: boolean;
+  maxIterations: number;
+  satisfactionThreshold: number;
 } {
   let keyword = '';
   let engineType: SearchEngineType = 'google'; // 默认使用Google
@@ -93,6 +114,11 @@ function parseArguments(args: string[]): {
   let retryCount: number | undefined = undefined;
   let maxSecondaryKeywords: number | undefined = undefined;
   let maxResults: number | undefined = undefined;
+  let useLLM = false;
+  let llmModel = config.llm.defaultModel;
+  let enableIterative = false;
+  let maxIterations = config.iterativeEngine.maxIterations;
+  let satisfactionThreshold = config.iterativeEngine.defaultSatisfactionThreshold;
   
   // 提取命令行参数
   for (let i = 0; i < args.length; i++) {
@@ -168,6 +194,32 @@ function parseArguments(args: string[]): {
       }
     } else if (arg === '--output' || arg === '-o') {
       outputFilename = args[++i];
+    } else if (arg === '--use-llm') {
+      useLLM = true;
+    } else if (arg === '--llm-model') {
+      llmModel = args[++i];
+    } else if (arg === '--iterative') {
+      enableIterative = true;
+    } else if (arg === '--max-iterations') {
+      const value = parseInt(args[++i], 10);
+      if (!isNaN(value) && value > 0) {
+        maxIterations = value;
+      } else {
+        throw new AppError(
+          `迭代次数必须是正整数`,
+          ErrorType.VALIDATION
+        );
+      }
+    } else if (arg === '--satisfaction-threshold') {
+      const value = parseFloat(args[++i]);
+      if (!isNaN(value) && value > 0 && value <= 1) {
+        satisfactionThreshold = value;
+      } else {
+        throw new AppError(
+          `满意度阈值必须在0到1之间`,
+          ErrorType.VALIDATION
+        );
+      }
     } else if (!arg.startsWith('-') && keyword === '') {
       keyword = arg;
     }
@@ -190,7 +242,12 @@ function parseArguments(args: string[]): {
     batchSize,
     retryCount,
     maxSecondaryKeywords,
-    maxResults
+    maxResults,
+    useLLM,
+    llmModel,
+    enableIterative,
+    maxIterations,
+    satisfactionThreshold
   };
 }
 
@@ -435,109 +492,271 @@ async function executeFullQuery(
 }
 
 /**
+ * 执行同时使用字母组合和关键词模式的查询
+ */
+async function executeBothModeQuery(
+  keyword: string,
+  engine: SearchEngine,
+  options: SearchOptions,
+  outputDir: string
+): Promise<string> {
+  console.log(`使用混合模式(字母+关键词)查询: "${keyword}"`);
+  
+  // 首先执行字母组合查询
+  console.log(`1. 执行字母组合查询...`);
+  const alphabetsOutput = await executeAlphabetsQuery(
+    keyword,
+    engine,
+    options
+  );
+  
+  // 读取字母组合查询结果
+  const alphabetsData = JSON.parse(fs.readFileSync(alphabetsOutput, 'utf-8'));
+  console.log(`字母组合查询完成，发现${alphabetsData.suggestions?.length || 0}个建议`);
+  
+  // 然后执行关键词模式查询
+  console.log(`2. 执行关键词模式查询...`);
+  const keywordsOutput = await executeFullQuery(
+    keyword,
+    engine,
+    options,
+    outputDir
+  );
+  
+  // 读取关键词模式查询结果
+  const keywordsData = JSON.parse(fs.readFileSync(keywordsOutput, 'utf-8'));
+  console.log(`关键词模式查询完成，发现${keywordsData.suggestions?.length || 0}个建议`);
+  
+  // 合并结果
+  const combinedSuggestions = new Set<string>();
+  
+  // 添加字母组合结果
+  if (alphabetsData.suggestions && Array.isArray(alphabetsData.suggestions)) {
+    alphabetsData.suggestions.forEach((suggestion: string) => {
+      combinedSuggestions.add(suggestion);
+    });
+  }
+  
+  // 添加关键词模式结果
+  if (keywordsData.suggestions && Array.isArray(keywordsData.suggestions)) {
+    keywordsData.suggestions.forEach((suggestion: string) => {
+      combinedSuggestions.add(suggestion);
+    });
+  }
+  
+  // 创建合并输出
+  const combinedResult = {
+    query: keyword,
+    engine: engine.getName(),
+    totalSuggestions: combinedSuggestions.size,
+    suggestions: Array.from(combinedSuggestions),
+    timestamp: new Date().toISOString(),
+    options: {
+      ...options,
+      secondaryMode: 'both'
+    }
+  };
+  
+  // 保存合并结果
+  const safeKeyword = keyword.replace(/\s+/g, '_');
+  const outputPath = path.join(
+    outputDir,
+    `${engine.getName().toLowerCase()}_${safeKeyword}_combined.json`
+  );
+  
+  fs.writeFileSync(outputPath, JSON.stringify(combinedResult, null, 2), 'utf-8');
+  console.log(`混合模式查询完成，共发现${combinedSuggestions.size}个关键词建议`);
+  
+  return outputPath;
+}
+
+/**
+ * 执行迭代查询
+ */
+async function executeIterativeQuery(
+  keyword: string,
+  engine: SearchEngine,
+  options: SearchOptions & {
+    maxIterations: number;
+    satisfactionThreshold: number;
+    llmModel?: string;
+  }
+): Promise<string> {
+  console.log(`启动迭代关键词挖掘引擎: "${keyword}"...`);
+  
+  // 创建迭代查询引擎
+  const iterativeEngine = new IterativeQueryEngine(engine);
+  
+  // 执行迭代查询
+  const result = await iterativeEngine.startIterativeQuery(keyword, options);
+  
+  console.log(`迭代查询完成，共${result.totalIterations}次迭代，发现${result.totalKeywordsDiscovered}个关键词`);
+  
+  // 提取高价值关键词
+  if (result.finalReport && result.finalReport.topKeywords) {
+    console.log(`\n最有价值的长尾关键词:`);
+    result.finalReport.topKeywords.slice(0, 5).forEach((kw: string, i: number) => {
+      console.log(`${i + 1}. ${kw}`);
+    });
+  }
+  
+  // 报告分析结果
+  if (result.finalReport && result.finalReport.summary) {
+    console.log(`\n分析总结:`);
+    console.log(result.finalReport.summary);
+  }
+  
+  return 'success'; // 返回成功标志
+}
+
+/**
+ * 执行LLM驱动的关键词分析
+ */
+async function executeLLMAnalysis(
+  keyword: string,
+  suggestions: string[],
+  options: {
+    llmModel?: string;
+  }
+): Promise<void> {
+  console.log(`使用LLM分析 "${keyword}" 的关键词数据...`);
+  
+  try {
+    // 创建LLM服务和关键词分析器
+    const llmService = new LLMService({
+      model: options.llmModel
+    });
+    const keywordAnalyzer = new KeywordAnalyzer(llmService);
+    
+    // 执行分类
+    console.log(`正在对 ${suggestions.length} 条关键词进行分类...`);
+    const categories = await keywordAnalyzer.identifyKeywordCategories(keyword, suggestions);
+    
+    console.log(`\n关键词分类结果:`);
+    Object.entries(categories).forEach(([category, keywords]) => {
+      if (Array.isArray(keywords) && keywords.length > 0) {
+        console.log(`- ${category}: ${keywords.length}个关键词`);
+      }
+    });
+    
+    // 提取高价值关键词
+    console.log(`\n选择高价值关键词...`);
+    const highValueKeywords = keywordAnalyzer.selectHighValueKeywords(categories, keyword, 10);
+    
+    console.log(`\n最有价值的10个长尾关键词:`);
+    highValueKeywords.forEach((kw, i) => {
+      console.log(`${i + 1}. ${kw}`);
+    });
+    
+    // 提取查询模式
+    console.log(`\n提取查询模式...`);
+    const patterns = await keywordAnalyzer.extractQueryPatterns(keyword, suggestions);
+    
+    console.log(`\n查询模式:`);
+    patterns.slice(0, 5).forEach(pattern => {
+      console.log(`- ${pattern}`);
+    });
+    
+    // 生成战略查询建议
+    console.log(`\n生成下一轮查询建议...`);
+    const strategicQueries = await keywordAnalyzer.generateStrategicQueries(keyword, suggestions);
+    
+    console.log(`\n推荐的下一轮查询关键词:`);
+    strategicQueries.slice(0, 5).forEach((query, i) => {
+      console.log(`${i + 1}. ${query}`);
+    });
+    
+  } catch (error) {
+    console.error(`LLM分析失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * 主函数
  */
 export async function main() {
   try {
-    const args = process.argv.slice(2);
+    const args = parseArguments(process.argv.slice(2));
     
     // 显示帮助信息
-    if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    if (args.keyword === '--help' || args.keyword === '-h' || !args.keyword) {
       printHelp();
       return;
     }
     
-    // 解析参数
-    const {
-      keyword,
-      engineType,
-      domain,
-      proxyServer,
-      useSystemBrowser: initialUseSystemBrowser,
-      enableSecondRound: initialEnableSecondRound,
-      secondaryMode,
-      outputFilename,
-      batchSize: initialBatchSize,
-      retryCount,
-      maxSecondaryKeywords,
-      maxResults
-    } = parseArguments(args);
-    
-    if (!keyword) {
-      console.error('请提供关键词参数 (-k 或 --keyword)');
-      return;
+    // 检查是否设置OpenAI API密钥
+    if ((args.useLLM || args.enableIterative) && !process.env.OPENAI_API_KEY && !config.llm.apiKey) {
+      throw new AppError('未设置OpenAI API密钥。请设置OPENAI_API_KEY环境变量或在配置中提供。', 
+                      ErrorType.VALIDATION);
     }
     
-    // 设置通用查询选项
-    const useSystemBrowser = initialUseSystemBrowser || false;
-    const enableSecondRound = initialEnableSecondRound !== undefined ? initialEnableSecondRound : true;
-    const batchSize = initialBatchSize || 5;
-    
-    // 使用SearchOptions，包含所有所需选项
-    const options: SearchOptions = {
-      useSystemBrowser,
-      enableSecondRound,
-      domain,
-      proxyServer,
-      batchSize,
-      retryCount: retryCount || 2,
-      maxSecondaryKeywords: maxSecondaryKeywords || 10
-    };
-    
-    // 创建输出目录
-    const outputDir = ensureOutputDirectory();
-    
-    // 选择搜索引擎
-    const engine = createSearchEngine(engineType);
+    // 创建搜索引擎
+    const engine = createSearchEngine(args.engineType);
     if (!engine) {
-      console.error(`无效的搜索引擎类型: ${engineType}`);
+      console.error(`无效的搜索引擎类型: ${args.engineType}`);
       return;
     }
     
     console.log(`使用搜索引擎: ${engine.getName()}`);
-    console.log(`查询关键词: "${keyword}"`);
+    console.log(`查询关键词: "${args.keyword}"`);
     
     try {
-      let outputPath: string = '';
+      let result: string = '';
       
-      // 根据查询模式执行不同的查询
-      if (secondaryMode === 'alphabets' || secondaryMode === 'both') {
-        // 执行字母组合查询
-        console.log(`执行字母组合查询...`);
-        outputPath = await executeAlphabetsQuery(
-          keyword,
+      if (args.enableIterative) {
+        // 使用迭代查询引擎
+        result = await executeIterativeQuery(
+          args.keyword,
           engine,
-          options,
-          outputFilename
+          {
+            ...args,
+            llmModel: args.useLLM ? args.llmModel : undefined
+          }
         );
-      } else if (secondaryMode === 'keywords' && enableSecondRound) {
-        // 首先执行初始查询获取基础数据
-        const initialSuggestions = await executeInitialQuery(keyword, engine, options);
+      } else if (args.useLLM) {
+        // 先执行标准查询
+        let outputFilename;
+        if (args.outputFilename) {
+          outputFilename = args.outputFilename;
+        }
         
-        if (initialSuggestions.length === 0) {
-          console.log(`警告: 初始查询未返回任何结果，无法执行二次查询`);
+        // 基于查询模式选择不同的执行方式
+        if (args.secondaryMode === 'both' || args.secondaryMode === 'keywords') {
+          result = await executeFullQuery(args.keyword, engine, args, ensureOutputDirectory());
+        } else if (args.secondaryMode === 'alphabets') {
+          result = await executeAlphabetsQuery(args.keyword, engine, args, outputFilename);
         } else {
-          // 基于初始查询结果执行二次查询
-          outputPath = await executeSecondaryQueryBasedOnInitial(
-            keyword,
-            initialSuggestions,
-            engine,
-            options,
-            outputDir
+          result = await executeFullQuery(args.keyword, engine, args, ensureOutputDirectory());
+        }
+        
+        // 读取结果文件以获取建议
+        const resultData = JSON.parse(fs.readFileSync(result, 'utf-8'));
+        const suggestions = resultData.suggestions || [];
+        
+        // 使用LLM分析结果
+        if (suggestions.length > 0) {
+          await executeLLMAnalysis(
+            args.keyword,
+            suggestions,
+            { llmModel: args.llmModel }
           );
         }
       } else {
-        // 执行完整的查询（包括初始查询和可选的二次查询）
-        console.log(`执行完整的关键词查询流程...`);
-        outputPath = await executeFullQuery(
-          keyword,
-          engine,
-          options,
-          outputDir
-        );
+        // 标准查询流程
+        // 基于查询模式选择不同的执行方式
+        if (args.secondaryMode === 'both') {
+          result = await executeBothModeQuery(args.keyword, engine, args, ensureOutputDirectory());
+        } else if (args.secondaryMode === 'keywords') {
+          result = await executeFullQuery(args.keyword, engine, args, ensureOutputDirectory());
+        } else if (args.secondaryMode === 'alphabets') {
+          result = await executeAlphabetsQuery(args.keyword, engine, args, args.outputFilename);
+        } else {
+          // 默认为alphabets模式
+          result = await executeAlphabetsQuery(args.keyword, engine, args, args.outputFilename);
+        }
       }
       
-      console.log(`查询完成，结果保存在: ${outputPath}`);
+      console.log(`关键词查询完成，结果已保存。`);
     } catch (error) {
       console.error(`查询过程中发生错误: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
