@@ -6,6 +6,7 @@ import axios from 'axios';
 import { LLMServiceOptions } from '../types';
 import { config } from '../config';
 import { ErrorType, AppError } from '../core/errorHandler';
+import { coreValueDescription } from '../config/promptLibrary';
 
 /**
  * LLM响应接口
@@ -49,7 +50,7 @@ export class LLMService {
   private timeout: number;
   private maxRetries: number;
   private baseURL: string;
-  private coreValueDescription: string;
+  private coreValueDescription: string = coreValueDescription;
   // 会话上下文映射
   private sessionContexts: Map<string, LLMMessage[]> = new Map();
   // 会话元数据 - 存储每个会话的额外信息
@@ -77,31 +78,6 @@ export class LLMService {
       if (options.maxRetries) this.maxRetries = options.maxRetries;
       if (options.baseURL) this.baseURL = options.baseURL;
     }
-    
-    // KeywordNova core values and functionality description for enhancing LLM context
-    this.coreValueDescription = `
-KeywordNova is an advanced user intent mining and long-tail keyword discovery system designed to help marketers, content creators, and SEO experts by:
-
-1. Precise traffic acquisition - Uncovering numerous low-competition but high cumulative traffic long-tail search terms
-2. User intent analysis - Deep analysis of real needs and behavior patterns behind searches
-3. Intelligent content planning - Providing data-driven content gap and opportunity identification
-4. Commercial value assessment - Automatically identifying commercial intent keywords with high conversion potential
-5. Competitive differentiation - Discovering keyword gaps that competitors may overlook
-
-The system's core functionalities include:
-- Iterative keyword discovery through multi-round searches
-- AI-powered intent analysis to understand user motivation
-- Intelligent keyword categorization (informational, commercial, problem-solving)
-- High-value keyword identification
-- Comprehensive pattern analysis and recommendations
-
-When analyzing keywords, consider these dimensions:
-- Search intent (informational, navigational, commercial, transactional)
-- Commercial value and conversion potential
-- Content creation opportunities
-- Long-tail characteristics (specificity, niche relevance)
-- Search volume potential vs. competition
-`;
     
     // 检查API密钥
     if (!this.apiKey) {
@@ -193,22 +169,24 @@ When analyzing keywords, consider these dimensions:
     // 打印精简配置信息
     console.info(`[LLM] 发送请求到 ${this.model}，内容长度: ${prompt.length} 字符，${requireJson ? '要求JSON响应' : '不要求JSON响应'}${sessionId ? '，使用会话ID: ' + sessionId : ''}`);
     
-    // Enhance the system prompt with core values information
-    let enhancedSystemPrompt = `${systemPrompt}\n\n${this.coreValueDescription}`;
+    // Enhance the system prompt with core values information - 优化系统提示增强逻辑
+    let enhancedSystemPrompt = systemPrompt;
+    
+    // 只有当系统提示不包含核心价值信息时才添加 - 避免重复
+    if (!systemPrompt.includes('KeywordNova') && !systemPrompt.includes('long-tail keyword')) {
+      enhancedSystemPrompt = `${systemPrompt}\n\n${this.coreValueDescription}`;
+    }
     
     // 根据语言添加适当的说明
     if (language === 'en') {
-      enhancedSystemPrompt += '\n\nIMPORTANT: Please respond in English only.';
+      enhancedSystemPrompt += '\n\nPlease respond in English only.';
     } else if (language === 'zh') {
-      enhancedSystemPrompt += '\n\n重要提示：请只使用中文回复。';
+      enhancedSystemPrompt += '\n\n请只使用中文回复。';
     }
     
-    // Add JSON format instruction to system prompt when required
+    // 优化JSON格式指令 - 仅添加到系统提示中，不重复添加到用户提示
     if (requireJson) {
-      enhancedSystemPrompt += '\n\nVERY IMPORTANT: You MUST respond with VALID JSON ONLY. Your entire response must be a parseable JSON object or array. Do not include any explanatory text, markdown formatting, code blocks, or non-JSON content in your response. The response should start with "{" or "[" and end with "}" or "]" with no additional text before or after.';
-      
-      // Add to user prompt as well to reinforce the JSON requirement
-      prompt = `${prompt}\n\nREMINDER: Return your response as a valid, parseable JSON object with no additional text or explanations.`;
+      enhancedSystemPrompt += '\n\nVERY IMPORTANT: You MUST respond with valid JSON only. No explanatory text, markdown formatting, or non-JSON content.';
     }
     
     // 准备消息数组
@@ -280,7 +258,7 @@ When analyzing keywords, consider these dimensions:
           temperature: temperature
         };
         
-        // Add response_format parameter for JSON responses if required
+        // 使用OpenAI原生响应格式设置，而不是在提示中重复请求
         if (requireJson) {
           requestPayload.response_format = { type: "json_object" };
         }

@@ -128,6 +128,14 @@ export interface AnalysisPlanResult {
   patterns: string[];             // 识别的模式
   targetGoals: string[];          // 下一轮目标
   recommendedQueries: string[];   // 推荐的查询
+  domainRotationPlan?: {          // 领域轮换计划（可选）
+    dominantDomain: string;       // 主导领域
+    focusPercentage: number;      // 主导领域集中度
+    forbiddenDomains: string[];   // 禁用领域
+    underrepresentedDomains: string[]; // 未充分探索的领域
+    rotationStrategy: string;     // 轮换策略
+    excessiveFocus: boolean;      // 是否存在过度集中
+  };
 }
 
 /**

@@ -151,9 +151,25 @@ export class IterativeDiscoveryEngine {
             
             // 重新设计查询选择逻辑，确保多样性
             if (planResult.recommendedQueries.length > 0) {
-              // 选择策略：优先使用不同的查询以增加多样性
-              // 在早期迭代和后期迭代使用不同的策略
-              if (iterationCount <= 2) {
+              // 选择策略：考虑领域均衡和句式多样性
+              // 通过domain rotation plan选择下一轮查询
+              if (planResult.domainRotationPlan && planResult.domainRotationPlan.excessiveFocus) {
+                // 如果检测到领域严重不平衡，选择与主导领域不同的查询
+                const nonDominantQueries = planResult.recommendedQueries.filter(query => {
+                  const dominantDomain = planResult.domainRotationPlan?.dominantDomain || '';
+                  return !query.toLowerCase().includes(dominantDomain.toLowerCase());
+                });
+                
+                if (nonDominantQueries.length > 0) {
+                  // 使用非主导领域的查询
+                  currentQuery = nonDominantQueries[0];
+                  console.log(`[发现] 选择非主导领域查询: "${currentQuery}" (领域均衡策略)`);
+                } else {
+                  // 如果找不到非主导领域的查询，使用推荐的查询
+                  currentQuery = planResult.recommendedQueries[0];
+                  console.log(`[发现] 选择推荐查询: "${currentQuery}" (找不到非主导领域查询)`);
+                }
+              } else if (iterationCount <= 2) {
                 // 早期迭代：选择最多样的查询，关注广度
                 // 使用索引轮换，确保我们不会重复使用建议列表中的相同位置
                 const index = (iterationCount - 1) % planResult.recommendedQueries.length;
@@ -558,12 +574,70 @@ export class IterativeDiscoveryEngine {
       console.info(`[ENGINE_INFO] Original keyword: "${originalKeyword}"`);
       console.info(`[ENGINE_INFO] Total keywords so far: ${currentKeywords.length}`);
       
+      // 首先分析当前关键词的领域分布情况
+      const domainAnalysis = this.analyzeDomainFocus(
+        currentKeywords, 
+        originalKeyword
+      );
+      
+      // 如果检测到领域严重不平衡，记录日志
+      if (domainAnalysis.excessiveFocus) {
+        console.warn(`[ENGINE_WARN] Detected excessive focus on domain: ${domainAnalysis.dominantDomain} (${domainAnalysis.focusPercentage.toFixed(2)}%)`);
+        console.warn(`[ENGINE_WARN] Will enforce domain rotation to improve diversity`);
+      }
+      
+      // 获取LLM生成的规划结果
       const result = await this.intentAnalyzer.planNextIteration(
         originalKeyword,
         currentKeywords,
         nextIterationNumber,
         this.iterationHistory
       );
+      
+      // 应用领域均衡和句式多样性增强
+      if (result.recommendedQueries.length > 0) {
+        // 1. 如果检测到领域严重不平衡，过滤掉属于主导领域的查询
+        if (domainAnalysis.excessiveFocus && domainAnalysis.forbiddenDomains.length > 0) {
+          const originalCount = result.recommendedQueries.length;
+          result.recommendedQueries = result.recommendedQueries.filter(query => {
+            // 过滤掉包含主导领域关键词的查询
+            return !domainAnalysis.forbiddenDomains.some(domain => 
+              query.toLowerCase().includes(domain.toLowerCase())
+            );
+          });
+          
+          console.info(`[ENGINE_INFO] Filtered out ${originalCount - result.recommendedQueries.length} queries containing dominant domain`);
+          
+          // 如果过滤后查询太少，添加一些探索未充分代表的领域的查询
+          if (result.recommendedQueries.length < 3 && domainAnalysis.underrepresentedDomains.length > 0) {
+            const neededQueries = 5 - result.recommendedQueries.length;
+            const underrepresentedQueries = domainAnalysis.underrepresentedDomains
+              .slice(0, neededQueries)
+              .map(domain => `${originalKeyword} applications in ${domain} domain`);
+            
+            result.recommendedQueries = [...result.recommendedQueries, ...underrepresentedQueries];
+            console.info(`[ENGINE_INFO] Added ${underrepresentedQueries.length} queries for underrepresented domains`);
+          }
+        }
+        
+        // 2. 应用句式多样性增强
+        result.recommendedQueries = this.enforcePatternDiversity(
+          result.recommendedQueries,
+          nextIterationNumber
+        );
+        
+        // 3. 添加领域轮换计划
+        result.domainRotationPlan = {
+          dominantDomain: domainAnalysis.dominantDomain,
+          focusPercentage: domainAnalysis.focusPercentage,
+          forbiddenDomains: domainAnalysis.forbiddenDomains,
+          underrepresentedDomains: domainAnalysis.underrepresentedDomains,
+          rotationStrategy: domainAnalysis.excessiveFocus 
+            ? "Force exploration of underrepresented domains, prohibit dominant domain"
+            : "Balance domain distribution, ensure diversity",
+          excessiveFocus: domainAnalysis.excessiveFocus
+        };
+      }
       
       console.info(`[ENGINE_INFO] Next iteration planning completed successfully`);
       console.info(`[ENGINE_INFO] Got ${result.recommendedQueries.length} recommended queries`);
@@ -590,19 +664,46 @@ export class IterativeDiscoveryEngine {
         }
       }
       
-      // 返回默认规划结果
+      // 分析现有关键词的领域分布，即使LLM调用失败也能提供领域均衡
+      const domainAnalysis = this.analyzeDomainFocus(currentKeywords, originalKeyword);
+      
+      // 返回默认规划结果，但应用领域均衡逻辑
       console.info(`[ENGINE_INFO] Using fallback query strategy due to LLM error`);
+      
+      // 创建基础查询列表
+      let fallbackQueries = [
+        `${originalKeyword} how`,
+        `${originalKeyword} best`,
+        `${originalKeyword} tutorial`,
+        `${originalKeyword} problems`,
+        `${originalKeyword} compare`
+      ];
+      
+      // 添加来自未充分探索领域的查询
+      if (domainAnalysis.excessiveFocus && domainAnalysis.underrepresentedDomains.length > 0) {
+        domainAnalysis.underrepresentedDomains.slice(0, 5).forEach(domain => {
+          fallbackQueries.push(`${originalKeyword} applications in ${domain} domain`);
+        });
+      }
+      
+      // 应用句式多样性增强
+      fallbackQueries = this.enforcePatternDiversity(fallbackQueries, nextIterationNumber);
+      
       return {
         gaps: ['Gaps could not be identified through LLM analysis'],
         patterns: [],
         targetGoals: [`Discover more long-tail keywords for "${originalKeyword}"`],
-        recommendedQueries: [
-          `${originalKeyword} how`,
-          `${originalKeyword} best`,
-          `${originalKeyword} tutorial`,
-          `${originalKeyword} problems`,
-          `${originalKeyword} compare`
-        ]
+        recommendedQueries: fallbackQueries,
+        domainRotationPlan: {
+          dominantDomain: domainAnalysis.dominantDomain,
+          focusPercentage: domainAnalysis.focusPercentage,
+          forbiddenDomains: domainAnalysis.forbiddenDomains,
+          underrepresentedDomains: domainAnalysis.underrepresentedDomains,
+          rotationStrategy: domainAnalysis.excessiveFocus 
+            ? "Force exploration of underrepresented domains, prohibit dominant domain"
+            : "Balance domain distribution, ensure diversity",
+          excessiveFocus: domainAnalysis.excessiveFocus
+        }
       };
     }
   }
@@ -662,16 +763,162 @@ export class IterativeDiscoveryEngine {
     dominantDomain: string;
     focusPercentage: number;
     excessiveFocus: boolean;
+    forbiddenDomains: string[];
+    underrepresentedDomains: string[];
   } {
-    const domain = query.split(' ')[0].toLowerCase();
-    const domainKeywords = keywords.filter(keyword => keyword.toLowerCase().startsWith(domain));
-    const focusPercentage = (domainKeywords.length / keywords.length) * 100;
-    const excessiveFocus = focusPercentage > 80;
-    const dominantDomain = excessiveFocus ? domain : '';
+    // 主要领域检测逻辑
+    const domains = new Map<string, number>();
+    // 使用英文领域名称列表，与提示词库保持一致
+    const importantDomains = [
+      'medical', 'education', 'finance', 'agriculture', 'manufacturing', 'environment',
+      'retail', 'entertainment', 'sports', 'legal', 'travel', 'culture'
+    ];
+    
+    // 识别关键词中的领域分布
+    for (const keyword of keywords) {
+      // 简单启发式：使用关键词前两个词作为领域指示
+      const words = keyword.split(' ');
+      if (words.length > 0) {
+        // 尝试将关键词映射到已知领域
+        let domain = '';
+        for (const impDomain of importantDomains) {
+          if (keyword.includes(impDomain)) {
+            domain = impDomain;
+            break;
+          }
+        }
+        
+        // 如果没有匹配已知领域，使用第一个词作为领域
+        if (!domain && words[0]) {
+          domain = words[0];
+        }
+        
+        if (domain) {
+          domains.set(domain, (domains.get(domain) || 0) + 1);
+        }
+      }
+    }
+    
+    // 找出主导领域
+    let dominantDomain = '';
+    let maxCount = 0;
+    let totalCount = 0;
+    
+    domains.forEach((count, domain) => {
+      totalCount += count;
+      if (count > maxCount) {
+        maxCount = count;
+        dominantDomain = domain;
+      }
+    });
+    
+    // 计算主导领域占比
+    const focusPercentage = totalCount > 0 ? (maxCount / totalCount) * 100 : 0;
+    
+    // 确定是否过度集中
+    const excessiveFocus = focusPercentage > 60;
+    
+    // 识别未被充分探索的领域
+    const underrepresentedDomains = importantDomains.filter(domain => {
+      const count = domains.get(domain) || 0;
+      return count < totalCount * 0.05; // 少于5%的领域被视为未充分探索
+    });
+    
+    // 确定应该禁止的领域（主导领域如果超过阈值）
+    const forbiddenDomains = excessiveFocus ? [dominantDomain] : [];
+    
     return {
       dominantDomain,
       focusPercentage,
-      excessiveFocus
+      excessiveFocus,
+      forbiddenDomains,
+      underrepresentedDomains
     };
+  }
+
+  /**
+   * 强制关键词句式多样性
+   * @param recommendedQueries 推荐的查询列表
+   * @param iterationNumber 当前迭代次数
+   * @returns 增强多样性后的查询列表
+   */
+  private enforcePatternDiversity(recommendedQueries: string[], iterationNumber: number): string[] {
+    // 句式模式类型
+    const patternTypes = ["question", "scenario", "comparison", "need", "case-study"];
+    const patterns = [
+      (kw: string) => `what is ${kw}`, // 问题型
+      (kw: string) => `${kw} in practical scenarios`, // 场景型
+      (kw: string) => `${kw} compared to traditional methods`, // 比较型
+      (kw: string) => `how to choose the most suitable ${kw}`, // 需求型
+      (kw: string) => `successful case studies of ${kw}` // 案例型
+    ];
+    
+    // 如果推荐查询不足，填充到5个
+    if (recommendedQueries.length < 5) {
+      const baseKeyword = recommendedQueries[0] || "artificial intelligence";
+      const baseWords = baseKeyword.split(' ');
+      const rootKeyword = baseWords[0] || "artificial intelligence";
+      
+      // 补充查询
+      while (recommendedQueries.length < 5) {
+        const patternIndex = recommendedQueries.length % patterns.length;
+        recommendedQueries.push(patterns[patternIndex](rootKeyword));
+      }
+    }
+    
+    // 根据迭代次数确定是增强商业意图还是多样性
+    if (iterationNumber > 2) {
+      // 后期迭代：确保有足够的商业意图
+      const hasCommercialIntent = (query: string) => {
+        const commercialTerms = ["buy", "price", "compare", "choose", "best", "recommend", "cost", "value"];
+        return commercialTerms.some(term => query.includes(term));
+      };
+      
+      let commercialCount = recommendedQueries.filter(hasCommercialIntent).length;
+      const targetCommercial = Math.ceil(recommendedQueries.length * 0.3); // 目标30%商业意图
+      
+      if (commercialCount < targetCommercial) {
+        // 不够，转换一些查询为商业意图
+        for (let i = 0; i < recommendedQueries.length && commercialCount < targetCommercial; i++) {
+          if (!hasCommercialIntent(recommendedQueries[i])) {
+            // 转换这个查询为商业意图
+            const baseWords = recommendedQueries[i].split(' ');
+            const rootKeyword = baseWords[0] || "artificial intelligence";
+            const commercialPatterns = [
+              `${rootKeyword} product price comparison`,
+              `best options to buy ${rootKeyword}`,
+              `most cost-effective ${rootKeyword} recommendations`,
+              `enterprise ${rootKeyword} solution costs`
+            ];
+            recommendedQueries[i] = commercialPatterns[i % commercialPatterns.length];
+            commercialCount++;
+          }
+        }
+      }
+    } else {
+      // 早期迭代：强调领域多样性
+      // 确保前5个查询使用不同的句式模式
+      for (let i = 0; i < Math.min(5, recommendedQueries.length); i++) {
+        // 如果查询明显遵循某种模式，保留原样
+        // 否则，应用特定模式转换
+        const baseWords = recommendedQueries[i].split(' ');
+        const rootKeyword = baseWords[0] || "artificial intelligence";
+        
+        // 检查是否已经具有鲜明的句式特征
+        const hasDistinctPattern = patternTypes.some(pt => {
+          return recommendedQueries[i].includes(`what is`) || 
+                 recommendedQueries[i].includes(`how to`) ||
+                 recommendedQueries[i].includes(`compared`) ||
+                 recommendedQueries[i].includes(`case`);
+        });
+        
+        if (!hasDistinctPattern) {
+          // 应用对应的句式模式
+          recommendedQueries[i] = patterns[i % patterns.length](rootKeyword);
+        }
+      }
+    }
+    
+    return recommendedQueries;
   }
 } 

@@ -15,6 +15,7 @@ import {
 import { config } from '../config';
 import { ErrorType, AppError } from '../core/errorHandler';
 import { generateSessionId } from './sessionIdGenerator';
+import { getSystemPrompt } from '../config/promptLibrary';
 
 /**
  * 意图分析器
@@ -57,11 +58,14 @@ export class IntentAnalyzer {
       // 使用统一的会话ID生成器（可选，此处保持为单次查询）
       const sessionId = generateSessionId('categorization', originalKeyword);
       
+      // 使用新的提示词库获取系统提示
+      const systemPrompt = getSystemPrompt('categorization', 'categorization', true);
+      
       // 发送到LLM
       const response = await this.llmService.sendPrompt(
         prompt,
         sessionId, // 传入生成的会话ID
-        'You are a keyword categorization expert capable of identifying different types of user intent. Categorize keywords into the following categories:\n\n1. Informational - User seeking information or answers (how, what, guide, tutorial)\n2. Commercial Investigation - User researching before purchase (best, top, review, vs, compare)\n3. Transactional - User ready to purchase or complete an action (buy, order, download, price)\n4. Navigational - User looking for a specific website or page (login, official, website)\n5. Problem-Solving - User trying to solve a specific issue (fix, solve, troubleshoot, error)\n6. Local - User seeking location-based information (near me, in [location])\n\nAdditionally, identify high-value keywords that indicate strong purchase intent or specific needs that could be easily monetized. Look for patterns in modifiers and qualifiers that reveal specific user needs.',
+        systemPrompt,
         true // 要求JSON响应
       );
       
@@ -108,11 +112,14 @@ export class IntentAnalyzer {
       // 使用标准化的会话ID
       const sessionId = generateSessionId('query', originalKeyword);
       
+      // 使用新的提示词库获取系统提示
+      const systemPrompt = getSystemPrompt('queryGeneration', 'queryGeneration', true);
+      
       // 发送到LLM
       const response = await this.llmService.sendPrompt(
         prompt,
         sessionId, // 使用生成的会话ID
-        'You are a search optimization expert capable of generating effective queries to discover valuable long-tail keywords. When generating queries:\n\n1. Add intent modifiers to the original keyword (how to, best, vs, problems, guide)\n2. Create question-based queries that reveal specific user needs\n3. Add qualifiers that target specific segments (for beginners, for professionals, cheap, premium)\n4. Combine the original keyword with related concepts to explore topic intersections\n5. Use patterns observed in the current keyword list to develop new variations\n6. Explore commercial intent by adding purchase-related modifiers (buy, price, alternatives)\n7. Consider local or demographic qualifiers if applicable\n\nGenerate diverse queries that will uncover different types of user intent and reveal valuable long-tail keywords with specific needs and clear intent.',
+        systemPrompt,
         true // 要求JSON响应
       );
       
@@ -262,11 +269,14 @@ export class IntentAnalyzer {
       // 格式化提示
       const prompt = this.llmService.formatPrompt(template, templateValues);
       
+      // 使用新的提示词库获取系统提示
+      const systemPrompt = getSystemPrompt('evaluation', 'evaluation', true);
+      
       // 发送到LLM
       const response = await this.llmService.sendPrompt(
         prompt,
         undefined, // 不使用会话ID
-        'You are a keyword analysis expert capable of evaluating the quality and value of keywords. When evaluating this iteration\'s keywords, assess the following dimensions:\n\n1. Relevance - How closely related are the keywords to the original topic\n2. Intent Clarity - How clear is the user intent behind each keyword\n3. Long-tail Value - How specific and niche are the keywords (longer, more specific terms often have higher conversion potential)\n4. Commercial Potential - Presence of buying intent or monetization opportunity\n5. Content Creation Value - Potential for creating valuable content that addresses user needs\n6. Competition Level - Likely competition difficulty based on specificity and phrasing\n7. Diversity - How well the keywords cover different user needs and intent types\n8. Domain Coverage - How well the keywords span across different industries, topics, or verticals\n9. Repetition Assessment - Measure and penalize excessive similarity or redundancy in keywords\n\nProvide a multi-dimensional assessment with specific recommendations for improving the next iteration. Identify patterns in the most valuable keywords to guide future discovery with emphasis on domain diversity.',
+        systemPrompt,
         true // 要求JSON响应
       );
       
@@ -345,8 +355,11 @@ export class IntentAnalyzer {
       // 格式化提示
       const prompt = this.llmService.formatPrompt(template, templateValues);
       
+      // 使用新的提示词库获取系统提示
+      const systemPrompt = getSystemPrompt('planning', 'planning', true);
+      
       // 发送初始上下文消息
-      // Send initial context message with iteration history summary
+      // 构建更完整的上下文，结合历史信息和当前提示，减少API调用次数
       let contextMessage = `We are planning iteration #${nextIterationNumber} for keyword "${originalKeyword}". `;
       
       if (iterationHistory.length > 0) {
@@ -360,29 +373,17 @@ export class IntentAnalyzer {
       
       contextMessage += `We currently have ${allKeywords.length} total keywords.`;
       
-      // 发送上下文消息，利用增强的会话管理功能
-      await this.llmService.sendPrompt(
-        contextMessage,
-        sessionId,
-        'You are a keyword discovery strategist specialized in finding patterns and gaps in existing keyword collections. Your goal is to plan the next iteration of keyword queries to maximize new discoveries.',
-        false,
-        {
-          temperature: 0.8, // 使用略高的温度以鼓励创新性
-          language: 'en',   // 明确指定使用英文
-          purpose: 'iteration_planning',
-          originalKeyword: originalKeyword,
-          iterationNumber: nextIterationNumber
-        }
-      );
+      // 组合上下文消息和主要提示，减少API调用
+      const fullPrompt = `${contextMessage}\n\n${prompt}`;
       
-      // 发送到LLM，传递会话ID以维持上下文
+      // 直接发送完整提示，避免多次调用API
       const response = await this.llmService.sendPrompt(
-        prompt,
+        fullPrompt,
         sessionId,
-        'You are a keyword discovery strategist specialized in finding patterns and gaps in existing keyword collections. Your goal is to plan the next iteration of keyword queries to maximize new discoveries.',
+        systemPrompt,
         true,
         {
-          temperature: 0.7, // 主要请求使用标准温度
+          temperature: 0.7, // 使用标准温度
           language: 'en'
         }
       );
@@ -509,8 +510,10 @@ export class IntentAnalyzer {
       // 格式化提示
       const prompt = this.llmService.formatPrompt(template, templateValues);
       
-      // 发送初始上下文信息
-      // Build a comprehensive summary of all iterations to provide context
+      // 使用新的提示词库获取系统提示
+      const systemPrompt = getSystemPrompt('reporting', 'finalReport', true);
+      
+      // 构建上下文信息加主要提示
       let contextMessage = `We are generating a final analysis report for keyword "${originalKeyword}". `;
       contextMessage += `We have completed ${iterationHistory.length - 1} iterations and discovered ${allKeywords.length} keywords total. `;
       
@@ -526,26 +529,14 @@ export class IntentAnalyzer {
         contextMessage += `Iteration summary: ${iterationSummary}.`;
       }
       
-      // 发送上下文消息，利用增强的会话管理
-      await this.llmService.sendPrompt(
-        contextMessage,
-        sessionId,
-        'You are an SEO and content strategy expert capable of extracting valuable insights from keyword data. Your analysis should focus on identifying high commercial value keywords and content opportunities.',
-        false,
-        {
-          temperature: 0.6, // 使用较低的温度以确保分析的准确性
-          language: 'en',   // 明确指定使用英文
-          purpose: 'final_report',
-          originalKeyword: originalKeyword,
-          iterationNumber: iterationHistory.length - 1
-        }
-      );
+      // 组合上下文和主要提示
+      const fullPrompt = `${contextMessage}\n\n${prompt}`;
       
-      // 发送到LLM，使用相同会话ID保持上下文
+      // 单次发送完整提示，减少API调用
       const response = await this.llmService.sendPrompt(
-        prompt,
+        fullPrompt,
         sessionId,
-        'You are an SEO and content strategy expert capable of extracting valuable insights from keyword data. Your analysis should focus on identifying high commercial value keywords and content opportunities.',
+        systemPrompt,
         true,
         {
           temperature: 0.5,  // 使用较低的温度以获得更确定性的结果

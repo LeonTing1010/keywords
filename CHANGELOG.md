@@ -5,6 +5,32 @@
 格式基于[Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+## [2.5.0] - 2025-05-04
+
+### 新增
+- 创建了新的`promptLibrary.ts`模块，集中管理提示词
+- 为不同LLM交互任务实现了模块化系统角色和任务指令
+- 添加了`getSystemPrompt()`工具函数，用于动态组合提示词
+
+### 变更
+- 精简核心价值描述约50%，同时保留关键信息
+- 优化JSON响应处理，使用OpenAI原生响应格式
+- 在规划和报告工作流中将多次API调用合并为单次调用
+- 统一了代码库中的领域命名约定
+- 增强会话上下文管理，避免冗余信息
+
+### 移除
+- 清除`IntentAnalyzer.ts`中的重复系统指令
+- 移除用户提示中的冗余JSON格式指令
+
+### 技术改进
+- 每次API调用的token使用量预计减少30-40%
+- 在`planNextIteration`和`generateFinalReport`方法中减少50%的API调用次数
+- 通过集中式提示词管理提高代码可维护性
+- 通过标准化提示模式增强系统一致性
+
 ## [2.4.0] - 2023-12-XX
 
 ### 新增
