@@ -1,5 +1,5 @@
 /**
- * KeywordNova 提示词库
+ * KeywordIntent 提示词库
  * 集中管理模型提示词，提高一致性和可维护性
  */
 
@@ -37,11 +37,11 @@ export const analysisInstructions = {
 };
 
 /**
- * KeywordNova核心价值描述
+ * KeywordIntent核心价值描述
  * 精简版本，用于系统提示增强
  */
 export const coreValueDescription = `
-KeywordNova identifies valuable long-tail keywords by:
+KeywordIntent identifies valuable long-tail keywords and user intent by:
 1. Uncovering low-competition terms with high cumulative traffic
 2. Analyzing user intent and behavior patterns
 3. Identifying commercial keywords with conversion potential

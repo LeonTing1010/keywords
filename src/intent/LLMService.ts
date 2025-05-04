@@ -1,5 +1,5 @@
 /**
- * KeywordNova LLM服务
+ * KeywordIntent LLM服务
  * 提供与语言模型的交互能力
  */
 import axios from 'axios';
@@ -173,7 +173,7 @@ export class LLMService {
     let enhancedSystemPrompt = systemPrompt;
     
     // 只有当系统提示不包含核心价值信息时才添加 - 避免重复
-    if (!systemPrompt.includes('KeywordNova') && !systemPrompt.includes('long-tail keyword')) {
+    if (!systemPrompt.includes('KeywordIntent') && !systemPrompt.includes('long-tail keyword')) {
       enhancedSystemPrompt = `${systemPrompt}\n\n${this.coreValueDescription}`;
     }
     

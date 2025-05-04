@@ -312,9 +312,27 @@ export class LLMServiceHub {
       'Authorization': `Bearer ${this.apiKey}`
     };
     
-    // 不同的模型格式
-    const mappedModel = model === 'qwen-plus' ? 'qwen-max' : model;
+    // 针对Qwen模型的特殊处理
+    // 模型名称映射 - Qwen API要求特定的模型名称格式
+    let mappedModel = model;
+    if (model === 'qwen-plus') {
+      mappedModel = 'qwen-max';
+    } else if (model === 'qwen-turbo') {
+      mappedModel = 'qwen-turbo';
+    } else if (!model.startsWith('qwen-')) {
+      mappedModel = 'qwen-max'; // 默认使用qwen-max
+    }
     
+    // 对JSON响应请求的特殊处理
+    let systemMessage = messages.find(m => m.role === 'system');
+    if (requireJson && systemMessage) {
+      // 确保系统消息包含返回JSON的明确指令
+      if (!systemMessage.content.includes('JSON') && !systemMessage.content.includes('json')) {
+        systemMessage.content += '\n\nYour response must be a valid JSON object. Do not include any markdown formatting like ```json or ``` in your response.';
+      }
+    }
+    
+    // 构建请求数据
     const data = {
       model: mappedModel,
       messages,
@@ -323,6 +341,16 @@ export class LLMServiceHub {
       max_tokens: 1500
     };
     
+    // 打印debug信息
+    if (this.verbose) {
+      console.log(`[LLMServiceHub] 发送请求到Qwen API: ${url}`);
+      console.log(`[LLMServiceHub] 使用模型: ${mappedModel}`);
+      console.log(`[LLMServiceHub] 消息数量: ${messages.length}`);
+      if (requireJson) {
+        console.log(`[LLMServiceHub] 请求JSON响应格式`);
+      }
+    }
+    
     try {
       const response = await axios.post(url, data, {
         headers,
@@ -330,12 +358,42 @@ export class LLMServiceHub {
       });
       
       if (this.verbose) {
-        console.log(`[LLMServiceHub] Qwen API响应: ${JSON.stringify(response.data).substring(0, 150)}...`);
+        console.log(`[LLMServiceHub] Qwen API响应状态: ${response.status}`);
+        console.log(`[LLMServiceHub] Qwen API响应数据预览: ${JSON.stringify(response.data).substring(0, 150)}...`);
       }
       
-      return response.data.choices[0].message.content;
+      // 如果响应中有直接message内容，则提取，否则回退到choices
+      if (response.data.message && response.data.message.content) {
+        return response.data.message.content;
+      } else if (response.data.choices && response.data.choices.length > 0) {
+        return response.data.choices[0].message.content;
+      } else {
+        throw new Error('Qwen API响应格式异常');
+      }
     } catch (error: any) {
-      console.error('[LLMServiceHub] Qwen API错误:', error.response?.data || error.message);
+      // 详细记录错误信息以便调试
+      console.error('[LLMServiceHub] Qwen API错误:');
+      
+      if (error.response) {
+        // 服务器响应错误
+        console.error(`状态码: ${error.response.status}`);
+        console.error(`响应头: ${JSON.stringify(error.response.headers)}`);
+        console.error(`响应体: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        // 请求发送成功但没有收到响应
+        console.error('没有收到响应');
+        console.error(`请求: ${JSON.stringify(error.request)}`);
+      } else {
+        // 设置请求时发生的错误
+        console.error(`错误消息: ${error.message}`);
+      }
+      
+      // 如果使用了requireJson但失败，尝试不使用JSON格式重试一次
+      if (requireJson) {
+        console.warn('[LLMServiceHub] 使用JSON格式请求失败，尝试以普通格式重试');
+        return this.callQwenAPI(messages, model, temperature, false);
+      }
+      
       throw error;
     }
   }
@@ -581,17 +639,196 @@ export class LLMServiceHub {
       return JSON.parse(response) as T;
     } catch (error) {
       try {
-        // 尝试提取JSON部分
+        // 尝试提取JSON部分 - 查找最外层的大括号对
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          return JSON.parse(jsonMatch[0]) as T;
+          const jsonContent = jsonMatch[0];
+          return JSON.parse(jsonContent) as T;
+        }
+        
+        // 尝试通过替换常见错误格式来修复JSON
+        const cleanedJson = this.cleanJsonString(response);
+        if (cleanedJson) {
+          return JSON.parse(cleanedJson) as T;
         }
         
         throw new Error('无法解析JSON响应');
       } catch (jsonError) {
-        console.error('[LLMServiceHub] JSON解析错误:', response);
+        console.error('[LLMServiceHub] JSON解析错误, 原始响应:', response);
+        
+        // 尝试构建一个基本的对象作为后备
+        try {
+          // 从文本中提取可能的键值对
+          const fallbackObject = this.createFallbackObject(response);
+          if (Object.keys(fallbackObject).length > 0) {
+            console.warn('[LLMServiceHub] 使用后备对象作为解析结果');
+            return fallbackObject as unknown as T;
+          }
+        } catch (e) {
+          // 忽略后备解析错误
+        }
+        
         throw new Error(`JSON解析失败: ${jsonError}`);
       }
+    }
+  }
+  
+  /**
+   * 清理JSON字符串，修复常见格式问题
+   */
+  private cleanJsonString(input: string): string | null {
+    try {
+      // 移除可能的markdown代码块标记
+      let cleaned = input.replace(/```json|```/g, '').trim();
+      
+      // 确保只保留一个完整的JSON对象
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      } else {
+        return null;
+      }
+      
+      // 修复常见的JSON格式错误
+      cleaned = cleaned
+        // 修复没有引号的键
+        .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3')
+        // 修复单引号
+        .replace(/'/g, '"')
+        // 修复尾随逗号
+        .replace(/,(\s*[}\]])/g, '$1')
+        // 移除注释
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      
+      // 验证是否可以解析
+      JSON.parse(cleaned);
+      return cleaned;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /**
+   * 从文本中创建后备对象
+   */
+  private createFallbackObject(text: string): Record<string, any> {
+    const result: Record<string, any> = {};
+    
+    // 尝试提取键值对
+    const pairs = text.match(/"([^"]+)"\s*:\s*("[^"]*"|[0-9]+|true|false|\[[^\]]*\]|\{[^}]*\})/g);
+    
+    if (pairs) {
+      pairs.forEach(pair => {
+        try {
+          // 将单个键值对包装在对象中解析
+          const wrappedPair = `{${pair}}`;
+          const parsed = JSON.parse(wrappedPair);
+          const key = Object.keys(parsed)[0];
+          result[key] = parsed[key];
+        } catch (e) {
+          // 忽略无法解析的键值对
+        }
+      });
+    }
+    
+    // 如果没有找到键值对，尝试提取分类或列表
+    if (Object.keys(result).length === 0) {
+      // 检查是否有分类列表
+      const categories = text.match(/[Cc]ategor(y|ies):\s*(.*?)$/m);
+      if (categories && categories[2]) {
+        result.categories = categories[2].split(/[,;]/).map(c => c.trim());
+      }
+      
+      // 检查是否有关键词列表
+      const keywords = text.match(/[Kk]eywords?:\s*(.*?)$/m);
+      if (keywords && keywords[1]) {
+        result.keywords = keywords[1].split(/[,;]/).map(k => k.trim());
+      }
+      
+      // 检查是否有分析结果
+      const analysis = text.match(/[Aa]nalysis:\s*(.*?)$/m);
+      if (analysis && analysis[1]) {
+        result.analysis = analysis[1].trim();
+      }
+    }
+    
+    return result;
+  }
+  
+  /**
+   * 特定的意图分析方法
+   * 针对系统中最常用的意图分析场景优化
+   */
+  async analyzeIntent(keyword: string, suggestions: string[], options: AnalysisOptions = {}): Promise<any> {
+    const systemPrompt = options.systemPrompt || 
+      'You are an intent analysis expert who can identify the underlying user intent behind search queries.';
+    
+    // 制作更具体的任务描述，明确要求JSON格式
+    const prompt = JSON.stringify({
+      task: 'keyword_intent_analysis',
+      data: {
+        keyword,
+        suggestions
+      },
+      requirements: {
+        outputFormat: 'strictJson',
+        returnFormat: {
+          intents: [
+            {
+              type: "string",
+              confidence: "number",
+              patterns: ["string"]
+            }
+          ],
+          categories: {
+            "categoryName": ["keywords"]
+          },
+          recommendations: ["string"]
+        }
+      }
+    }, null, 2);
+    
+    // 发送带有额外JSON格式信息的提示
+    try {
+      const response = await this.sendPrompt(prompt, {
+        systemPrompt: systemPrompt + '\n\nYou must respond with strictly valid JSON format without any explanations, prefixes, or suffixes. Do not use markdown formatting.',
+        temperature: options.temperature || 0.3, // 使用较低温度以提高一致性
+        requireJson: true,
+        language: options.language || 'en'
+      });
+      
+      try {
+        // 尝试解析响应
+        return this.parseJsonResponse(response);
+      } catch (parseError) {
+        // 如果解析失败，返回一个基本结构，避免完全失败
+        console.warn('[LLMServiceHub] 意图分析JSON解析失败，使用后备结构');
+        
+        // 提取可能的意图信息
+        const intents = [];
+        const intentMatch = response.match(/intent|type|category/i);
+        if (intentMatch) {
+          intents.push({
+            type: "informational",
+            confidence: 0.7,
+            patterns: [keyword]
+          });
+        }
+        
+        return {
+          intents: intents,
+          categories: {
+            "general": [keyword]
+          },
+          recommendations: ["创建相关内容"]
+        };
+      }
+    } catch (error) {
+      console.error('[LLMServiceHub] 意图分析失败:', error);
+      throw error;
     }
   }
 } 
