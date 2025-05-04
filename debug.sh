@@ -38,9 +38,8 @@ echo -e "关键词: ${GREEN}$1${NC}"
 echo -e "日志文件: ${BLUE}${LOG_FILE}${NC}\n"
 
 # 设置环境变量并运行应用
-# 注意: --no-warnings 用于抑制 TS-Node 的警告
 # --transpile-only 用于加快编译速度
-DEBUG=true npx ts-node --no-warnings --transpile-only keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
+DEBUG=true npx ts-node --transpile-only keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
 
