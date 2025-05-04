@@ -62,7 +62,7 @@ export class IterativeDiscoveryEngine {
       config.iterativeEngine.defaultSatisfactionThreshold;
     
     // 执行初始查询
-    console.log(`执行初始查询: "${initialKeyword}"`);
+    console.log(`Executing initial query: "${initialKeyword}"`);
     let currentKeywords: string[] = [];
     let queryType: 'initial' | 'iteration' = 'initial';
     let currentQuery = initialKeyword;
@@ -83,7 +83,7 @@ export class IterativeDiscoveryEngine {
         keywords: [...currentKeywords],
         newKeywordsCount: currentKeywords.length,
         satisfactionScore: 1.0, // 初始查询默认满意度为1.0
-        analysis: '初始查询',
+        analysis: 'Initial query',
         recommendedQueries: []
       });
       
@@ -94,7 +94,7 @@ export class IterativeDiscoveryEngine {
       while (iterationCount < maxIterations && continueFetching) {
         iterationCount++;
         queryType = 'iteration';
-        console.log(`\n执行迭代 #${iterationCount}`);
+        console.log(`\nExecuting iteration #${iterationCount}`);
         
         // 确定下一轮查询
         if (this.intentAnalyzer && this.llmService) {
@@ -108,17 +108,17 @@ export class IterativeDiscoveryEngine {
           // 如果有推荐查询，使用第一个作为下一轮查询
           if (planResult.recommendedQueries.length > 0) {
             currentQuery = planResult.recommendedQueries[0];
-            console.log(`基于分析选择的查询: "${currentQuery}"`);
+            console.log(`Selected query based on analysis: "${currentQuery}"`);
           } else {
             // 使用初始关键词加变种
-            currentQuery = `${initialKeyword} 最佳`;
-            console.log(`使用默认查询: "${currentQuery}"`);
+            currentQuery = `${initialKeyword} best`;
+            console.log(`Using default query: "${currentQuery}"`);
           }
         } else {
           // 不使用LLM分析，使用简单变种
-          const variants = ['如何', '最佳', '教程', '问题', '比较'];
+          const variants = ['how', 'best', 'tutorial', 'problems', 'compare'];
           currentQuery = `${initialKeyword} ${variants[iterationCount % variants.length]}`;
-          console.log(`使用默认查询变种: "${currentQuery}"`);
+          console.log(`Using default query variant: "${currentQuery}"`);
         }
         
         // 执行迭代查询
@@ -139,7 +139,7 @@ export class IterativeDiscoveryEngine {
         satisfactionScore = Math.min(satisfactionScore, 1.0);
         
         // 创建当前迭代分析
-        let iterationAnalysis = `发现了${newDiscoveredKeywords.length}个新关键词`;
+        let iterationAnalysis = `Discovered ${newDiscoveredKeywords.length} new keywords`;
         let recommendedQueries: string[] = [];
         
         // 如果启用了LLM分析，评估迭代结果
@@ -149,7 +149,7 @@ export class IterativeDiscoveryEngine {
               initialKeyword,
               newDiscoveredKeywords,
               iterationCount,
-              [`发现长尾关键词`, `增加${initialKeyword}相关领域覆盖`]
+              [`Discover long-tail keywords`, `Increase coverage for ${initialKeyword} related areas`]
             );
             
             // 使用评估结果更新满意度
@@ -169,7 +169,7 @@ export class IterativeDiscoveryEngine {
               satisfactionScore < satisfactionThreshold && 
               evaluationResult.recommendContinue;
           } catch (error) {
-            console.error(`LLM分析评估失败: ${(error as Error).message}`);
+            console.error(`LLM analysis evaluation failed: ${(error as Error).message}`);
             // 评估失败时使用默认满意度计算
           }
         } else {
@@ -192,15 +192,15 @@ export class IterativeDiscoveryEngine {
           recommendedQueries
         });
         
-        console.log(`迭代 #${iterationCount} 完成. 新发现关键词: ${newDiscoveredKeywords.length}`);
-        console.log(`满意度评分: ${(satisfactionScore * 100).toFixed(1)}%`);
+        console.log(`Iteration #${iterationCount} completed. New keywords discovered: ${newDiscoveredKeywords.length}`);
+        console.log(`Satisfaction score: ${(satisfactionScore * 100).toFixed(1)}%`);
         
         // 如果满意度达到阈值或没有新关键词，停止迭代
         if (
           satisfactionScore >= satisfactionThreshold || 
           newDiscoveredKeywords.length === 0
         ) {
-          console.log(`达到满意度阈值或无新关键词，停止迭代。`);
+          console.log(`Satisfaction threshold reached or no new keywords found. Stopping iterations.`);
           continueFetching = false;
         }
       }
@@ -219,7 +219,7 @@ export class IterativeDiscoveryEngine {
         highValueKeywords: [],
         intentAnalysis: null,
         iterationHistory: this.iterationHistory,
-        summary: `共执行了${this.iterationHistory.length - 1}次迭代，发现${allKeywords.length}个关键词。`
+        summary: `Executed ${this.iterationHistory.length - 1} iterations and discovered ${allKeywords.length} keywords.`
       };
       
       // 添加每次迭代的关键词
@@ -231,7 +231,7 @@ export class IterativeDiscoveryEngine {
       // 如果启用了LLM分析，生成最终分析报告
       if (this.intentAnalyzer && this.llmService) {
         try {
-          console.log(`生成最终意图分析报告...`);
+          console.log(`Generating final intent analysis report...`);
           const finalAnalysis = await this.intentAnalyzer.generateFinalReport(
             initialKeyword,
             allKeywords,
@@ -241,7 +241,7 @@ export class IterativeDiscoveryEngine {
           discoveryResult.highValueKeywords = finalAnalysis.highValueKeywords;
           discoveryResult.summary = finalAnalysis.summary;
         } catch (error) {
-          console.error(`生成最终分析报告失败: ${(error as Error).message}`);
+          console.error(`Failed to generate final analysis report: ${(error as Error).message}`);
         }
       }
       
@@ -249,7 +249,7 @@ export class IterativeDiscoveryEngine {
     } catch (error) {
       handleError(error);
       throw new AppError(
-        `关键词发现过程失败: ${(error as Error).message}`,
+        `Keyword discovery process failed: ${(error as Error).message}`,
         ErrorType.UNKNOWN,
         error as Error
       );
@@ -298,7 +298,7 @@ export class IterativeDiscoveryEngine {
           // 存储二级查询结果
           queryResults[secondaryQuery] = secondaryResult.suggestions;
         } catch (error) {
-          console.error(`二级查询 "${secondaryQuery}" 失败: ${(error as Error).message}`);
+          console.error(`Secondary query "${secondaryQuery}" failed: ${(error as Error).message}`);
           // 继续下一个查询
         }
       }
@@ -333,7 +333,7 @@ export class IterativeDiscoveryEngine {
       };
     } catch (error) {
       throw new AppError(
-        `迭代执行失败: ${(error as Error).message}`,
+        `Iteration execution failed: ${(error as Error).message}`,
         ErrorType.UNKNOWN,
         error as Error
       );
@@ -358,8 +358,8 @@ export class IterativeDiscoveryEngine {
       
       // 意图指示词加分
       const intentWords = [
-        '如何', '最佳', '推荐', '问题', '对比', 
-        '教程', '指南', '方法', '步骤', '技巧'
+        'how', 'best', 'recommended', 'problems', 'compare', 
+        'tutorial', 'guide', 'method', 'steps', 'tips'
       ];
       
       for (const word of intentWords) {
@@ -394,7 +394,7 @@ export class IterativeDiscoveryEngine {
   ): Promise<AnalysisPlanResult> {
     if (!this.intentAnalyzer) {
       throw new AppError(
-        '无法规划迭代：意图分析器未初始化',
+        'Cannot plan iteration: Intent analyzer not initialized',
         ErrorType.VALIDATION
       );
     }
@@ -407,18 +407,18 @@ export class IterativeDiscoveryEngine {
         this.iterationHistory
       );
     } catch (error) {
-      console.error(`规划下一次迭代失败: ${(error as Error).message}`);
+      console.error(`Failed to plan next iteration: ${(error as Error).message}`);
       // 返回默认规划结果
       return {
-        gaps: ['未能通过LLM分析识别空缺'],
+        gaps: ['Gaps could not be identified through LLM analysis'],
         patterns: [],
-        targetGoals: [`为"${originalKeyword}"发现更多长尾关键词`],
+        targetGoals: [`Discover more long-tail keywords for "${originalKeyword}"`],
         recommendedQueries: [
-          `${originalKeyword} 如何`,
-          `${originalKeyword} 最佳`,
-          `${originalKeyword} 教程`,
-          `${originalKeyword} 问题`,
-          `${originalKeyword} 比较`
+          `${originalKeyword} how`,
+          `${originalKeyword} best`,
+          `${originalKeyword} tutorial`,
+          `${originalKeyword} problems`,
+          `${originalKeyword} compare`
         ]
       };
     }
