@@ -17,10 +17,10 @@ export const config = {
     timeout: 60000, // milliseconds
     maxRetries: 3,
     promptTemplates: {
-      identifyCategories: `# KeywordNova Intent Mining Engine - Keyword Categorization
+      identifyCategories: `# KeywordIntent Intent Mining Engine - Keyword Categorization
 
 ## Persona
-You are KeywordNova's AI Intent Mining Engine specializing in keyword categorization and intent analysis.
+You are KeywordIntent's AI Intent Mining Engine specializing in keyword categorization and intent analysis.
 
 ## Task
 Analyze the following keyword list and classify them into intent-based categories.
@@ -44,10 +44,10 @@ Suggestion list:
 ## Output Format
 Return the categorized keywords in a valid JSON format with each category containing an array of keywords.`,
 
-      generateQueries: `# KeywordNova Intent Mining Engine - Strategic Query Generation
+      generateQueries: `# KeywordIntent Intent Mining Engine - Strategic Query Generation
 
 ## Persona
-You are KeywordNova's AI Query Strategist specialized in discovering high-value long-tail keywords.
+You are KeywordIntent's AI Query Strategist specialized in discovering high-value long-tail keywords.
 
 ## Task
 Based on the initial keyword and search suggestions, generate strategic queries to discover valuable long-tail keywords.
@@ -69,7 +69,7 @@ Search suggestions:
 ## Output Format
 Return a JSON object containing an array of recommended queries, with each query designed to discover new keyword opportunities.`,
 
-      evaluateIteration: `# KeywordNova Intent Mining Engine - Iteration Quality Evaluation
+      evaluateIteration: `# KeywordIntent Intent Mining Engine - Iteration Quality Evaluation
 
 ## Analysis Goal
 Evaluate the quality of keywords discovered in the current iteration, with special focus on domain coverage and diversity.
@@ -136,7 +136,7 @@ Return a JSON object containing:
    - List of missing domains
    - Domain saturation risk assessment`,
 
-      nextIterationSimplified: `# KeywordNova Intent Mining Engine - Query Strategy Optimization
+      nextIterationSimplified: `# KeywordIntent Intent Mining Engine - Query Strategy Optimization
 
 ## Analysis Goal
 Develop optimal queries for the next iteration based on current keyword distribution, ensuring comprehensive domain coverage.
@@ -186,7 +186,7 @@ Return a JSON object containing:
 4. "recommendedQueries": 10 diverse query designs ensuring domain balance coverage
 5. "domainRotationPlan": Detailed explanation of how to rotate different domains in future iterations`,
 
-      finalReportSimplified: `# KeywordNova Intent Mining Engine - Comprehensive Analysis Report
+      finalReportSimplified: `# KeywordIntent Intent Mining Engine - Comprehensive Analysis Report
 
 ## Analysis Goal
 Conduct a comprehensive evaluation of keyword mining results, providing in-depth domain coverage analysis and improvement recommendations.

@@ -38,7 +38,16 @@ echo -e "关键词: ${GREEN}$1${NC}"
 echo -e "日志文件: ${BLUE}${LOG_FILE}${NC}\n"
 
 # 设置环境变量并运行应用
-DEBUG=true npx ts-node keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
+# 注意: --no-warnings 用于抑制 TS-Node 的警告
+# --transpile-only 用于加快编译速度
+DEBUG=true npx ts-node --no-warnings --transpile-only keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
 
-echo -e "\n${GREEN}调试会话完成${NC}"
+EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $EXIT_CODE -eq 0 ]; then
+  echo -e "\n${GREEN}调试会话完成${NC}"
+else
+  echo -e "\n${RED}调试会话出错，退出代码: ${EXIT_CODE}${NC}"
+fi
+
 echo -e "日志已保存到: ${BLUE}${LOG_FILE}${NC}" 
