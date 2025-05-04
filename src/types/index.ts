@@ -1,12 +1,12 @@
 /**
- * Google自动补全建议结果
+ * 类型定义索引文件
+ * 导出所有类型定义，方便其他模块引用
  */
-export interface AutocompleteSuggestion {
-  /** 搜索关键词 */
-  keyword: string;
-  /** 建议数组 */
-  suggestions: string[];
-}
+
+// 重新导出搜索引擎相关类型
+export * from './searchEngineTypes';
+
+// 其他类型定义
 
 /**
  * Google Trends结果
@@ -39,49 +39,3 @@ export interface Credentials {
   email: string;
   password: string;
 }
-
-/**
- * 搜索引擎配置接口
- */
-export interface SearchEngineConfig {
-  /** 搜索引擎名称 */
-  name: string;
-  /** 搜索引擎默认域名 */
-  defaultDomain: string;
-  /** 是否支持代理 */
-  supportsProxy: boolean;
-  /** 是否支持系统浏览器 */
-  supportsSystemBrowser: boolean;
-  /** 是否支持二次查询 */
-  supportsSecondRound: boolean;
-  /** 搜索引擎描述 */
-  description: string;
-}
-
-/**
- * 搜索选项接口
- */
-export interface SearchOptions {
-  /** Google域名 */
-  domain?: string;
-  /** 代理服务器 */
-  proxyServer?: string;
-  /** 是否使用系统浏览器 */
-  useSystemBrowser?: boolean;
-  /** 是否启用二次查询 */
-  enableSecondRound?: boolean;
-  /** 其他选项 */
-  [key: string]: any;
-}
-
-/**
- * 可用的搜索引擎类型
- */
-export type SearchEngineType = 
-  | 'google' 
-  | 'baidu' 
-  | 'youtube' 
-  | 'bilibili' 
-  | 'xiaohongshu' 
-  | 'reddit' 
-  | 'freepik'; 

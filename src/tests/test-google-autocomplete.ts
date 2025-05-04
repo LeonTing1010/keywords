@@ -1,4 +1,4 @@
-import { GoogleSearchEngine } from '../scrapers/GoogleSearchEngine';
+import { GoogleSearchEngine } from '../engines/GoogleSearchEngine';
 import { SearchOptions } from '../types';
 
 async function testGoogleAutocomplete() {

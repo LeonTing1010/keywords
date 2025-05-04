@@ -1,10 +1,17 @@
 {
   "name": "keywords",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "keywordsTool.ts",
   "scripts": {
-    "google-keywords": "ts-node googleKeywords.ts",
-    "keywords": "ts-node keywordsTool.ts"
+    "keywords": "ts-node keywordsTool.ts",
+    "debug": "node --inspect-brk -r ts-node/register keywordsTool.ts",
+    "debug:google": "node --inspect-brk -r ts-node/register keywordsTool.ts test --engine google --temp-browser",
+    "build": "tsc",
+    "dev": "ts-node keywordsTool.ts",
+    "debug:tools": "./debug-tools.sh",
+    "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
+    "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
+    "debug:secondary": "DEBUG=true ts-node src/tools/debug-secondaryQuery.ts"
   },
   "keywords": [],
   "author": "",
