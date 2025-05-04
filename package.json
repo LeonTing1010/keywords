@@ -1,5 +1,5 @@
 {
-  "name": "keywords",
+  "name": "keywordnova",
   "version": "1.0.0",
   "main": "keywordsTool.ts",
   "scripts": {
@@ -20,11 +20,13 @@
     "keywords",
     "long-tail",
     "autocomplete",
-    "search-suggestions"
+    "search-suggestions",
+    "intent-mining",
+    "content-strategy"
   ],
   "author": "",
   "license": "ISC",
-  "description": "多平台关键词搜索建议工具",
+  "description": "KeywordNova - 意图挖掘与长尾关键词爆破系统",
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/axios": "^0.14.0",
@@ -33,13 +35,13 @@
   },
   "dependencies": {
     "@types/fs-extra": "^11.0.4",
-    "axios": "^1.9.0",
+    "axios": "^1.6.7",
     "fs-extra": "^11.3.0",
     "handlebars": "^4.7.8",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "bin": {
-    "keywords": "./keywordsTool.ts"
+    "keywordnova": "./keywordsTool.ts"
   }
 }
