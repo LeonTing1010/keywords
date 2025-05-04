@@ -11,7 +11,6 @@ import { SearchEngineType, SearchOptions } from '../types';
 import { handleError, ErrorType, AppError } from '../core/errorHandler';
 import * as path from 'path';
 import * as fs from 'fs';
-import { ensureOutputDirectory } from '../core/fileUtils';
 import { IterativeDiscoveryEngine } from '../discovery/IterativeDiscoveryEngine';
 import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { IntentAnalyzer } from '../intent/IntentAnalyzer';
@@ -297,7 +296,9 @@ export async function main() {
     
     // 确保输出目录存在
     const outputDir = path.resolve(process.cwd(), 'output');
-    ensureOutputDirectory(outputDir);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
     
     // 创建搜索引擎实例
     const searchEngine = createSearchEngine(options.engineType);

@@ -79,51 +79,55 @@ export class CrossDomainAnalyzer {
    * 分析跨领域关系
    */
   async analyzeRelations(keywords: string[], domains?: string[]): Promise<CrossDomainAnalysisResult> {
-    let targetDomains = domains;
-    
     if (this.verbose) {
       console.info(`[CrossDomainAnalyzer] 开始跨域分析，关键词数量: ${keywords.length}`);
     }
     
-    // 如果没有提供领域，使用DomainExpert识别领域
-    if (!targetDomains && this.domainExpert) {
-      const domainInfo = await this.domainExpert.identifyDomain(keywords);
-      targetDomains = domainInfo.map(d => d.name);
-      
-      if (this.verbose) {
-        console.info(`[CrossDomainAnalyzer] 自动识别到 ${targetDomains.length} 个领域: ${targetDomains.join(', ')}`);
+    // 如果没有提供领域，尝试使用DomainExpert识别或通过LLM识别
+    let targetDomains: string[] = domains || [];
+    
+    if (targetDomains.length === 0) {
+      if (this.domainExpert) {
+        // 通过领域专家识别
+        const domainInfo = await this.domainExpert.identifyDomain(keywords);
+        targetDomains = domainInfo.map((d: { name: string }) => d.name);
+        
+        if (this.verbose) {
+          console.info(`[CrossDomainAnalyzer] 领域专家识别到 ${targetDomains.length} 个领域: ${targetDomains.join(', ')}`);
+        }
+      } else {
+        // 使用LLM识别领域
+        const domainIdResult = await this.llmService.analyze('identify_domains', {
+          keywords,
+          task: 'Identify the main domains represented in these keywords'
+        }, {
+          systemPrompt: 'You are a domain classification expert who identifies distinct industries and fields from keywords.',
+          format: 'json'
+        });
+        
+        targetDomains = domainIdResult.domains.map((d: any) => d.name);
+        
+        if (this.verbose) {
+          console.info(`[CrossDomainAnalyzer] LLM识别到 ${targetDomains.length} 个领域: ${targetDomains.join(', ')}`);
+        }
       }
     }
     
-    // 如果还是没有领域，使用LLM直接识别
-    if (!targetDomains) {
-      const domainIdResult = await this.llmService.analyze('identify_domains', {
-        keywords,
-        task: 'Identify the main domains represented in these keywords'
-      }, {
-        systemPrompt: 'You are a domain classification expert who identifies distinct industries and fields from keywords.',
-        format: 'json'
-      });
-      
-      targetDomains = domainIdResult.domains.map((d: any) => d.name);
-      
-      if (this.verbose) {
-        console.info(`[CrossDomainAnalyzer] LLM识别到 ${targetDomains.length} 个领域: ${targetDomains.join(', ')}`);
-      }
-    }
+    // 确保targetDomains不为undefined
+    targetDomains = targetDomains || [];
     
     // 分析领域关系
-    const relations = await this.analyzeDomainRelations(keywords, targetDomains!);
+    const relations = await this.analyzeDomainRelations(keywords, targetDomains);
     
     // 识别跨域机会
-    const opportunities = await this.identifyCrossDomainOpportunities(keywords, targetDomains!, relations);
+    const opportunities = await this.identifyCrossDomainOpportunities(keywords, targetDomains, relations);
     
     // 创建跨域聚类
-    const clusters = await this.createCrossDomainClusters(keywords, targetDomains!, relations);
+    const clusters = await this.createCrossDomainClusters(keywords, targetDomains, relations);
     
     // 构建结果
     const result: CrossDomainAnalysisResult = {
-      domains: targetDomains!,
+      domains: targetDomains,
       keywordCount: keywords.length,
       relations,
       opportunities,
@@ -131,7 +135,7 @@ export class CrossDomainAnalyzer {
       summary: {
         strongestRelation: this.findStrongestRelation(relations),
         mostValuableOpportunity: this.findMostValuableOpportunity(opportunities),
-        domainConnectivity: this.calculateDomainConnectivity(relations, targetDomains!)
+        domainConnectivity: this.calculateDomainConnectivity(relations, targetDomains)
       }
     };
     

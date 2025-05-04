@@ -1,5 +1,5 @@
 /**
- * KeywordNova 文件工具模块
+ * KeywordIntent 文件工具模块
  * 处理文件系统操作
  */
 import * as fs from 'fs';
