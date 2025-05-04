@@ -91,3 +91,13 @@ export interface SearchEngineFactory {
   /** 检查搜索引擎是否已注册 */
   isRegistered(type: SearchEngineType): boolean;
 }
+
+/**
+ * KeywordNova 搜索引擎相关类型定义
+ */
+
+// 搜索引擎专用类型，如果有扩展需要可在此添加
+// 当前所有类型已在主types文件中定义，此文件为未来扩展预留
+
+// 这个导出是为了确保此模块被正确导入
+export const __SEARCH_ENGINE_TYPES_LOADED__ = true;

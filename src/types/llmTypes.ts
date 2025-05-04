@@ -1,4 +1,12 @@
-// LLM服务相关类型定义
+/**
+ * KeywordNova LLM相关类型定义
+ */
+
+// LLM专用类型，如果有扩展需要可在此添加
+// 当前所有类型已在主types文件中定义，此文件为未来扩展预留
+
+// 这个导出是为了确保此模块被正确导入
+export const __LLM_TYPES_LOADED__ = true;
 
 /**
  * LLM分析目的
@@ -69,6 +77,23 @@ export interface IterationResult {
 }
 
 /**
+ * 迭代历史记录
+ * 记录每次迭代的详细信息，用于LLM分析
+ */
+export interface IterationHistory {
+  iterationNumber: number;                // 迭代次数
+  query: string;                          // 使用的查询词
+  queryType: 'initial' | 'iteration';     // 查询类型
+  queryResults?: Record<string, string[]>; // 每个查询的结果（可选）
+  keywords: string[];                     // 发现的关键词
+  newKeywordsCount: number;               // 新发现关键词数量
+  satisfactionScore: number;              // 满意度评分
+  analysis: string;                       // 分析结果
+  evaluationDimensions?: EvaluationDimensions; // 评估维度（可选）
+  recommendedQueries: string[];           // 推荐的查询
+}
+
+/**
  * 迭代查询选项
  */
 export interface IterativeQueryOptions {
@@ -90,6 +115,7 @@ export interface IterativeQueryResult {
   satisfactionByIteration: Record<number, number>; // 每次迭代的满意度
   keywords: string[];              // 所有关键词
   finalReport: any;                // 最终报告
+  iterationHistory: IterationHistory[]; // 完整迭代历史
 }
 
 /**
@@ -102,6 +128,8 @@ export interface FinalReport {
   contentOpportunities: string[];  // 内容机会
   commercialKeywords: string[];    // 商业关键词
   summary: string;                 // 总结
+  iterationInsights?: string[];    // 迭代过程洞察
+  bestPatterns?: string[];         // 最佳查询模式
 }
 
 /**

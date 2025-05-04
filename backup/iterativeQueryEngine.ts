@@ -9,7 +9,8 @@ import {
   IterationResult, 
   IterationEvaluation,
   AnalysisPlanResult,
-  SearchOptions
+  SearchOptions,
+  IterationHistory
 } from '../types';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -29,6 +30,7 @@ export class IterativeQueryEngine {
   private allDiscoveredKeywords: Set<string> = new Set();
   private keywordsByIteration: Map<number, string[]> = new Map();
   private satisfactionScores: Map<number, number> = new Map();
+  private iterationHistory: IterationHistory[] = [];
   private outputDir: string;
   
   constructor(engine: SearchEngine) {
@@ -59,6 +61,7 @@ export class IterativeQueryEngine {
     this.allDiscoveredKeywords.clear();
     this.keywordsByIteration.clear();
     this.satisfactionScores.clear();
+    this.iterationHistory = [];
     
     let currentKeyword = seedKeyword;
     let continueIteration = true;
@@ -74,6 +77,18 @@ export class IterativeQueryEngine {
     let result = await this.executeInitialQuery(currentKeyword, searchOptions);
     this.recordIterationResults(result, 0);
     
+    // 记录初始查询的历史
+    this.iterationHistory.push({
+      iterationNumber: 0,
+      query: currentKeyword,
+      queryType: 'initial',
+      newKeywordsCount: result.length,
+      keywords: result,
+      satisfactionScore: 0,
+      analysis: '初始字母组合查询',
+      recommendedQueries: []
+    });
+    
     // 创建迭代进度文件
     const progressFilePath = this.createProgressFile(seedKeyword);
     
@@ -85,7 +100,8 @@ export class IterativeQueryEngine {
       // 1. 分析当前结果并生成下一轮查询策略
       const analysisResult = await this.analyzeAndPlan(
         currentKeyword, 
-        Array.from(this.allDiscoveredKeywords)
+        Array.from(this.allDiscoveredKeywords),
+        this.iterationHistory
       );
       
       // 更新进度文件
@@ -115,6 +131,20 @@ export class IterativeQueryEngine {
         analysisResult.targetGoals
       );
       this.satisfactionScores.set(this.iteration, satisfactionScore.overallScore);
+      
+      // 记录本次迭代历史
+      this.iterationHistory.push({
+        iterationNumber: this.iteration,
+        query: iterationResults.mostEffectiveQuery || '多查询组合',
+        queryType: 'iteration',
+        queryResults: iterationResults.queryResults,
+        newKeywordsCount: iterationResults.newKeywordsCount,
+        keywords: iterationResults.allSuggestions,
+        satisfactionScore: satisfactionScore.overallScore,
+        analysis: satisfactionScore.analysis,
+        evaluationDimensions: satisfactionScore.dimensions,
+        recommendedQueries: analysisResult.recommendedQueries
+      });
       
       // 更新进度文件
       this.updateProgressFile(progressFilePath, {
@@ -199,13 +229,18 @@ export class IterativeQueryEngine {
    */
   private async analyzeAndPlan(
     originalKeyword: string,
-    currentKeywords: string[]
+    currentKeywords: string[],
+    iterationHistory: IterationHistory[] = []
   ): Promise<AnalysisPlanResult> {
     this.logger.info(`分析${currentKeywords.length}个关键词并规划下一轮查询...`);
     
     try {
-      // 使用关键词分析器规划下一步
-      return await this.keywordAnalyzer.planNextIteration(originalKeyword, currentKeywords);
+      // 使用关键词分析器规划下一步，传递迭代历史
+      return await this.keywordAnalyzer.planNextIteration(
+        originalKeyword, 
+        currentKeywords,
+        iterationHistory
+      );
     } catch (error) {
       this.logger.error(`规划失败: ${error instanceof Error ? error.message : String(error)}`);
       
@@ -414,45 +449,42 @@ export class IterativeQueryEngine {
    * 生成最终报告
    */
   private async generateFinalReport(originalKeyword: string): Promise<any> {
-    this.logger.info(`生成关于"${originalKeyword}"的最终报告...`);
-    
     try {
-      // 使用LLM生成最终报告
-      return await this.llmService.generateFinalKeywordReport(
+      this.logger.info('生成最终分析报告...');
+      
+      // 准备报告数据
+      const allKeywords = Array.from(this.allDiscoveredKeywords);
+      const iterationScores = Object.fromEntries(this.satisfactionScores);
+      
+      // 使用LLM服务生成最终报告
+      const finalReport = await this.llmService.generateFinalKeywordReport(
         originalKeyword,
-        Array.from(this.allDiscoveredKeywords),
+        allKeywords,
         {
           iterationCount: this.iteration,
-          satisfactionScores: Object.fromEntries(this.satisfactionScores)
+          satisfactionScores: iterationScores,
+          iterationHistory: this.iterationHistory // 传递完整的迭代历史
         }
       );
+      
+      this.logger.info('最终分析报告生成完成');
+      return finalReport;
     } catch (error) {
       this.logger.error(`生成最终报告失败: ${error instanceof Error ? error.message : String(error)}`);
       
-      // 返回基本报告
-      const categories = await this.keywordAnalyzer.identifyKeywordCategories(
-        originalKeyword, 
-        Array.from(this.allDiscoveredKeywords)
-      );
-      
-      const highValueKeywords = this.keywordAnalyzer.selectHighValueKeywords(
-        categories,
-        originalKeyword,
-        15
-      );
-      
+      // 如果LLM分析失败，创建基本报告
       return {
-        categories,
-        topKeywords: highValueKeywords,
-        intentAnalysis: {
-          informational: categories.informational?.length || 0,
-          commercial: categories.commercial?.length || 0,
-          tutorial: categories.tutorial?.length || 0,
-          problemSolving: categories.problemSolving?.length || 0
+        summary: `完成了对"${originalKeyword}"的关键词分析，共发现${this.allDiscoveredKeywords.size}个关键词，经过${this.iteration}轮迭代。`,
+        categories: {
+          informational: [],
+          problemSolving: [],
+          commercial: [],
+          tutorial: []
         },
-        contentOpportunities: [],
-        commercialKeywords: categories.commercial || [],
-        summary: `共发现${this.allDiscoveredKeywords.size}个关键词，经过${this.iteration}轮迭代。`
+        topKeywords: Array.from(this.allDiscoveredKeywords).slice(0, 20),
+        intentAnalysis: "无法生成详细的意图分析",
+        contentOpportunities: ["建议基于发现的关键词创建内容"],
+        commercialKeywords: []
       };
     }
   }
@@ -471,7 +503,8 @@ export class IterativeQueryEngine {
       keywordsByIteration: Object.fromEntries(this.keywordsByIteration),
       satisfactionByIteration: Object.fromEntries(this.satisfactionScores),
       keywords: Array.from(this.allDiscoveredKeywords),
-      finalReport
+      finalReport,
+      iterationHistory: this.iterationHistory
     };
   }
   

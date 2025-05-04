@@ -8,7 +8,8 @@ import {
   KeywordCategories, 
   AnalysisPlanResult,
   FinalReport,
-  LLMServiceOptions
+  LLMServiceOptions,
+  IterationHistory
 } from '../types';
 import Handlebars from 'handlebars';
 
@@ -286,75 +287,101 @@ export class LLMService {
   
   /**
    * 生成下一轮迭代策略
+   * 使用迭代历史进行更智能的规划
    */
   async generateNextIterationStrategy(
-    evaluation: IterationEvaluation,
     originalKeyword: string,
-    currentKeywords: string[]
+    currentKeywords: string[],
+    iterationHistory: IterationHistory[] = []
   ): Promise<AnalysisPlanResult> {
     try {
-      // 识别弱项
-      const dimensionEntries = Object.entries(evaluation.dimensions)
-        .map(([key, value]) => ({ key, value }))
-        .sort((a, b) => a.value - b.value);
-      
-      const weakestDimensions = dimensionEntries
-        .slice(0, 2)
-        .map(entry => entry.key);
-      
+      this.logger.info(`生成下一轮迭代策略，考虑 ${iterationHistory.length} 轮历史数据`);
+
+      // 准备历史迭代数据摘要
+      const historySummary = this.prepareIterationHistorySummary(iterationHistory);
+
+      // 准备提示数据
       const promptData = {
         originalKeyword,
-        evaluation: JSON.stringify(evaluation, null, 2),
-        weakestDimensions: weakestDimensions.join(', '),
-        keywordSamples: currentKeywords.slice(0, 15).join('\n')
+        keywordCount: currentKeywords.length,
+        keywordSamples: currentKeywords.slice(0, 20).join('\n'), // 提供样本
+        currentIteration: iterationHistory.length,
+        iterationHistory: historySummary,
+        hasHistory: iterationHistory.length > 0
       };
-      
-      const prompt = `基于以下关键词迭代评估，为下一轮迭代设计最优策略。
 
-原始关键词: ${originalKeyword}
-当前迭代评分: ${evaluation.overallScore.toFixed(2)}
-需要改进的维度: ${weakestDimensions.join(', ')}
-评估分析: ${evaluation.analysis}
+      // 使用专门的历史感知提示模板
+      const prompt = this.compilePrompt('nextIterationWithHistory', promptData);
 
-当前关键词样本:
-${currentKeywords.slice(0, 15).join('\n')}
-
-请设计下一轮迭代策略，包括:
-1. 3-5个具体的查询关键词，能弥补当前弱项
-2. 每个查询的具体目标和预期
-3. 应专注挖掘的子主题或角度
-4. 应使用的查询修饰词(如问题词、商业词等)
-
-以JSON格式返回完整策略，包含以下字段:
-- gaps: 发现的关键词空缺(字符串数组)
-- patterns: 识别的模式(字符串数组)
-- targetGoals: 下一轮目标(字符串数组)
-- recommendedQueries: 推荐的查询(字符串数组)`;
-      
+      // 调用API
       const result = await this.callOpenAI(prompt);
-      
+
+      // 确保返回格式正确
+      if (!result.recommendedQueries || !Array.isArray(result.recommendedQueries)) {
+        throw new Error('LLM响应格式不正确，缺少推荐查询');
+      }
+
       return {
-        gaps: result.gaps || [],
-        patterns: result.patterns || [],
-        targetGoals: result.targetGoals || [],
-        recommendedQueries: result.recommendedQueries || []
+        gaps: result.gaps || ["未指定"],
+        patterns: result.patterns || ["未指定"],
+        targetGoals: result.targetGoals || ["发现更多长尾关键词"],
+        recommendedQueries: result.recommendedQueries.slice(0, 10) // 限制查询数量
       };
     } catch (error) {
       this.logger.error(`生成迭代策略失败: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // 返回基本策略
-      return {
-        gaps: ["商业意图关键词不足", "问题型关键词不足"],
-        patterns: ["用户倾向于查询具体问题"],
-        targetGoals: ["发现更多商业意图关键词", "探索更多问题型关键词"],
-        recommendedQueries: [
-          `${originalKeyword} 购买`,
-          `${originalKeyword} 价格`,
-          `${originalKeyword} 如何`,
-          `${originalKeyword} 问题`
-        ]
-      };
+      throw new AppError(
+        `生成迭代策略失败: ${error instanceof Error ? error.message : String(error)}`,
+        ErrorType.API
+      );
     }
+  }
+
+  /**
+   * 准备迭代历史摘要
+   * 将迭代历史转换为有用的提示输入
+   */
+  private prepareIterationHistorySummary(iterationHistory: IterationHistory[]): string {
+    if (iterationHistory.length === 0) {
+      return "无历史数据。";
+    }
+
+    let summary = "";
+    
+    // 创建每轮历史的摘要
+    iterationHistory.forEach((iteration, index) => {
+      // 查询和结果摘要
+      summary += `\n迭代${iteration.iterationNumber} [${iteration.queryType}]:\n`;
+      summary += `- 查询: "${iteration.query}"\n`;
+      summary += `- 发现新关键词: ${iteration.newKeywordsCount} 个\n`;
+      
+      // 添加满意度评分（如果有）
+      if (iteration.queryType === 'iteration') {
+        summary += `- 满意度评分: ${iteration.satisfactionScore.toFixed(2)}/1.0\n`;
+        
+        // 添加评估维度（如果有）
+        if (iteration.evaluationDimensions) {
+          const dimensions = iteration.evaluationDimensions;
+          summary += `- 评估维度: 相关性(${dimensions.relevance}/10), 长尾价值(${dimensions.longTailValue}/10), 商业价值(${dimensions.commercialValue}/10), 多样性(${dimensions.diversity}/10)\n`;
+        }
+      }
+      
+      // 添加使用的推荐查询（如果有）
+      if (iteration.recommendedQueries && iteration.recommendedQueries.length > 0) {
+        summary += `- 使用的推荐查询: ${iteration.recommendedQueries.slice(0, 3).join(', ')}${iteration.recommendedQueries.length > 3 ? '...' : ''}\n`;
+      }
+      
+      // 添加分析摘要（如果有）
+      if (iteration.analysis) {
+        summary += `- 分析: ${iteration.analysis.substring(0, 100)}${iteration.analysis.length > 100 ? '...' : ''}\n`;
+      }
+      
+      // 添加关键词样本
+      if (iteration.keywords && iteration.keywords.length > 0) {
+        summary += `- 关键词样本: ${iteration.keywords.slice(0, 5).join(', ')}${iteration.keywords.length > 5 ? '...' : ''}\n`;
+      }
+    });
+    
+    return summary;
   }
   
   /**
@@ -366,41 +393,56 @@ ${currentKeywords.slice(0, 15).join('\n')}
     metadata: {
       iterationCount: number;
       satisfactionScores: Record<number, number>;
+      iterationHistory?: IterationHistory[];
     }
   ): Promise<FinalReport> {
     try {
+      this.logger.info(`生成最终关键词报告，分析 ${allKeywords.length} 个关键词`);
+      
+      // 准备历史迭代数据摘要（如果有）
+      let historySummary = "";
+      if (metadata.iterationHistory && metadata.iterationHistory.length > 0) {
+        historySummary = this.prepareIterationHistorySummary(metadata.iterationHistory);
+      }
+      
+      // 准备模板数据
       const promptData = {
         originalKeyword,
         totalKeywords: allKeywords.length,
         iterationCount: metadata.iterationCount,
-        keywordSamples: allKeywords.slice(0, 100).join('\n') // 提供前100个关键词
+        keywordSamples: allKeywords.slice(0, 50).join('\n'), // 提供样本
+        hasHistory: !!historySummary,
+        iterationHistory: historySummary
       };
       
+      // 使用增强的最终报告模板
       const prompt = this.compilePrompt('finalReport', promptData);
+      
+      // 调用API
       const result = await this.callOpenAI(prompt);
       
-      return {
-        categories: result.categories || {},
-        topKeywords: result.topKeywords || [],
-        intentAnalysis: result.intentAnalysis || {},
-        contentOpportunities: result.contentOpportunities || [],
-        commercialKeywords: result.commercialKeywords || [],
-        summary: result.summary || ""
-      };
+      this.logger.info('最终报告生成完成');
+      return result as FinalReport;
     } catch (error) {
       this.logger.error(`生成最终报告失败: ${error instanceof Error ? error.message : String(error)}`);
       
       // 返回基本报告
       return {
         categories: {
-          informational: allKeywords.slice(0, 5),
-          commercial: []
+          informational: [],
+          commercial: [],
+          tutorial: [],
+          problemSolving: [],
+          definitional: []
         },
-        topKeywords: allKeywords.slice(0, 10),
-        intentAnalysis: {},
-        contentOpportunities: [],
+        topKeywords: allKeywords.slice(0, 15),
+        intentAnalysis: { 
+          primary: "信息查询", 
+          secondary: "商业意图" 
+        },
+        contentOpportunities: ["创建基于这些关键词的内容"],
         commercialKeywords: [],
-        summary: "无法生成详细分析。请检查API密钥或重试。"
+        summary: `共分析了${allKeywords.length}个关键词，涵盖多种搜索意图。`
       };
     }
   }

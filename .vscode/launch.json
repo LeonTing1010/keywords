@@ -1,0 +1,79 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "启动程序",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/keywordNova.ts",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "DEBUG": "true"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "调试Google引擎",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/keywordNova.ts",
+      "args": [
+        "test",
+        "--engine",
+        "google",
+        "--temp-browser",
+        "--secondary-mode",
+        "keywords",
+        "--persist-browser=true"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "DEBUG": "true",
+        "SINGLE_BROWSER_INSTANCE": "true"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "调试自定义参数",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/keywordNova.ts",
+      "args": [],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "DEBUG": "true"
+      }
+    }
+  ]
+} 

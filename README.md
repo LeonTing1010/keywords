@@ -1,5 +1,7 @@
 # KeywordNova - 意图挖掘与长尾关键词爆破系统
 
+KeywordNova 是一个 AI 驱动的意图挖掘和长尾关键词发现系统，可帮助内容创作者、SEO 专家和营销人员发现有价值的长尾关键词并深入分析搜索意图。
+
 ## 系统价值
 
 KeywordNova 是一套先进的用户意图挖掘与长尾关键词爆破系统，结合搜索引擎数据采集与AI深度分析，帮助营销人员、内容创作者与SEO专家突破传统关键词研究的局限。
@@ -14,37 +16,96 @@ KeywordNova 是一套先进的用户意图挖掘与长尾关键词爆破系统�
 
 ## 核心功能
 
-- **AI驱动分析引擎** - 大语言模型实时分析关键词背后的用户意图和价值
-- **迭代优化查询** - 持续评估和优化，每轮挖掘更高价值的长尾词
-- **多维度智能分类** - 自动将关键词分为信息查询、问题解决、商业交易等类别
-- **价值评分系统** - 基于多项指标智能评估每个关键词的商业价值
-- **战略性查询规划** - AI生成下一轮最有可能产生高价值结果的查询策略
+- **迭代式关键词发现**：使用多轮迭代搜索自动发现长尾关键词
+- **AI 意图分析**：利用大型语言模型分析关键词背后的用户意图
+- **智能关键词分类**：自动将关键词分类为信息查询、商业交易、问题解决等类别
+- **高价值关键词识别**：自动识别最具商业价值和内容创作潜力的关键词
+- **多搜索引擎支持**：目前支持 Google，未来将扩展支持百度等搜索引擎
 
-## 使用指南
+## 项目结构
 
-### 快速开始
-
-```bash
-# 基础模式：全面关键词搜集
-npx ts-node keywordsTool.ts "your-keyword"
-
-# AI分析模式：深度意图分析
-npx ts-node keywordsTool.ts "your-keyword" --use-llm
-
-# 高级爆破模式：多轮迭代优化
-npx ts-node keywordsTool.ts "your-keyword" --iterative
+```
+src/
+  ├── cli/         # 命令行界面
+  ├── config/      # 配置文件
+  ├── core/        # 核心功能
+  ├── discovery/   # 关键词发现组件
+  ├── intent/      # 意图分析组件
+  ├── providers/   # 搜索引擎提供商
+  ├── types/       # 类型定义
+  └── utils/       # 工具函数
 ```
 
-### 战略选项
+## 快速开始
+
+### 安装
 
 ```bash
-# 终极模式：结合AI分析和迭代优化进行最深度挖掘
-npx ts-node keywordsTool.ts "your-keyword" --iterative --use-llm --max-iterations 5
+# 克隆仓库
+git clone https://github.com/yourusername/keywords.git
+cd keywords
 
-# 使用快捷命令
-npm run analyze -- "your-keyword"  # AI分析模式
-npm run iterative -- "your-keyword"  # 迭代爆破模式
+# 安装依赖
+npm install
 ```
+
+### 使用
+
+基本使用:
+
+```bash
+npm run keywords "your keyword"
+```
+
+更多选项:
+
+```bash
+# 使用代理
+npm run keywords "iphone" --proxy http://127.0.0.1:7890
+
+# 禁用 LLM 分析
+npm run keywords "web design" --no-llm
+
+# 指定更多迭代次数
+npm run keywords "machine learning" --max-iterations 7
+```
+
+## 配置
+
+可以通过以下环境变量配置:
+
+- `OPENAI_API_KEY`: 设置 OpenAI API 密钥（用于 LLM 分析）
+- `OUTPUT_DIR`: 自定义输出目录
+- `DEBUG`: 启用调试模式 (true/false)
+
+## 命令行选项
+
+```
+选项:
+  --engine, -e <引擎名称>     使用指定的搜索引擎(默认: google)
+  --domain, -d <域名>        使用指定的搜索引擎域名(根据引擎有不同默认值)
+  --proxy, -p <代理地址>     使用指定的代理服务器
+  --temp-browser, -t         使用临时浏览器实例而非系统浏览器
+  --max-results <数量>       查询最大结果数(默认: 300)
+  --output, -o <文件名>      指定输出文件名
+  --help, -h                 显示帮助信息
+
+AI分析选项:
+  --no-llm                   禁用LLM增强分析功能(默认启用)
+  --llm-model <模型名称>     指定LLM模型(默认: gpt-4)
+  --max-iterations <次数>    最大迭代次数(默认: 5)
+  --satisfaction <值>        满意度阈值(0-1之间，默认: 0.85)
+```
+
+## 依赖
+
+- Node.js >= 14
+- Playwright (用于浏览器自动化)
+- OpenAI API 或兼容接口 (用于 LLM 分析)
+
+## 许可证
+
+ISC
 
 ## AI意图挖掘引擎
 
@@ -104,7 +165,7 @@ KeywordNova的核心是AI意图挖掘引擎，它能够：
 ## 战略使用建议
 
 1. **从宽泛词开始** - 先用基础领域词进行初始查询，如"数字营销"
-2. **AI分析提炼** - 使用`--use-llm`分析初始结果，了解主要意图类别
-3. **深度爆破挖掘** - 针对有潜力的子领域使用`--iterative`模式进行深度挖掘
-4. **聚焦商业价值** - 关注分析报告中标记为商业意图的高价值关键词
-5. **测试转化效果** - 从最高价值关键词开始创建内容，测量实际转化率
+2. **开启AI分析** - 使用`--use-llm`选项获取更深入的关键词分析
+3. **调整满意度** - 对于竞争激烈领域，可将`--satisfaction-threshold`设为更高值，如0.9
+4. **增加迭代次数** - 对于复杂主题，使用`--max-iterations 7`进行更多轮查询
+5. **聚焦商业价值** - 关注分析报告中标记为商业意图的高价值关键词

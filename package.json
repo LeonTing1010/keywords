@@ -1,19 +1,18 @@
 {
   "name": "keywordnova",
   "version": "1.0.0",
-  "main": "keywordsTool.ts",
+  "main": "keywordNova.ts",
   "scripts": {
-    "keywords": "ts-node keywordsTool.ts",
-    "debug": "node --inspect-brk -r ts-node/register keywordsTool.ts",
-    "debug:google": "node --inspect-brk -r ts-node/register keywordsTool.ts test --engine google --temp-browser",
+    "keywords": "ts-node keywordNova.ts",
+    "debug": "node --inspect-brk -r ts-node/register keywordNova.ts",
+    "debug:google": "node --inspect-brk -r ts-node/register keywordNova.ts test --engine google --temp-browser",
     "build": "tsc",
-    "dev": "ts-node keywordsTool.ts",
+    "dev": "ts-node keywordNova.ts",
     "debug:tools": "./debug-tools.sh",
     "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
     "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
-    "debug:secondary": "DEBUG=true ts-node src/tools/debug-secondaryQuery.ts",
-    "iterative": "ts-node keywordsTool.ts --iterative",
-    "analyze": "ts-node keywordsTool.ts --use-llm"
+    "simple": "ts-node keywordNova.ts --no-llm",
+    "analyze": "ts-node keywordNova.ts"
   },
   "keywords": [
     "seo",
@@ -42,6 +41,6 @@
     "typescript": "^5.8.3"
   },
   "bin": {
-    "keywordnova": "./keywordsTool.ts"
+    "keywordnova": "./keywordNova.ts"
   }
 }

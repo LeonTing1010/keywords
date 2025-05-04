@@ -1,195 +1,218 @@
 #!/usr/bin/env node
 /**
- * 调试运行器
- * 专门用于调试搜索引擎的行为和解决问题
+ * KeywordNova 调试运行器
+ * 提供调试工具和诊断功能
  */
 
-import { GoogleSearchEngine } from '../engines/GoogleSearchEngine';
-import { Logger, LogLevel } from '../utils/logger';
-import { debugConfig } from '../config/debug.config';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as util from 'util';
+import { GoogleSearchEngine } from '../providers/GoogleSearchEngine';
+import { LLMService } from '../intent/LLMService';
+import { config } from '../config';
+import { AppError, ErrorType, handleError } from '../core/errorHandler';
 
-// 创建专用的调试日志记录器
-const logger = new Logger('DebugRunner', LogLevel.DEBUG);
-
-// 初始化
-async function init() {
-  logger.info('初始化调试运行器...');
-  
-  // 确保调试目录结构存在
-  ensureDebugDirectories();
-  
-  logger.debug(`调试配置: ${util.inspect(debugConfig)}`);
-  
-  // 注册进程退出处理
-  process.on('exit', () => {
-    logger.info('调试会话结束');
-  });
-  
-  process.on('uncaughtException', (err) => {
-    logger.error(`未捕获的异常: ${err.message}`, true);
-    logger.error(err.stack || '没有可用的堆栈信息');
-  });
-  
-  process.on('unhandledRejection', (reason) => {
-    logger.error(`未处理的Promise拒绝: ${reason}`, true);
-  });
+// 创建日志目录
+const LOG_DIR = path.join(process.cwd(), 'logs', 'debug');
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
-// 确保调试目录结构
-function ensureDebugDirectories() {
-  // 创建截图目录
-  fs.mkdirSync(debugConfig.screenshotPath, { recursive: true });
-  
-  // 创建日志目录
-  fs.mkdirSync(debugConfig.logPath, { recursive: true });
-  
-  // 创建其他调试资源目录
-  const networkLogsDir = path.join(debugConfig.logPath, 'network');
-  fs.mkdirSync(networkLogsDir, { recursive: true });
-  
-  const performanceLogsDir = path.join(debugConfig.logPath, 'performance');
-  fs.mkdirSync(performanceLogsDir, { recursive: true });
-}
+// 获取当前时间戳
+const getTimestamp = () => {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+};
 
-// 使用Google引擎运行调试查询
-async function runGoogleDebugQuery(keyword: string) {
-  logger.info(`开始调试Google搜索引擎查询: "${keyword}"`);
-  
-  // 实例化Google搜索引擎
-  const engine = new GoogleSearchEngine();
+// 创建日志文件名
+const createLogFileName = (prefix: string) => {
+  return path.join(LOG_DIR, `${prefix}_${getTimestamp()}.log`);
+};
+
+// 控制台日志功能
+const log = {
+  info: (message: string) => console.log(`[INFO] ${message}`),
+  debug: (message: string) => console.log(`[DEBUG] ${message}`),
+  warn: (message: string) => console.warn(`[WARN] ${message}`),
+  error: (message: string) => console.error(`[ERROR] ${message}`),
+  success: (message: string) => console.log(`[SUCCESS] ${message}`)
+};
+
+/**
+ * 运行网络诊断
+ */
+async function runNetworkDiagnostics() {
+  log.info('开始运行网络诊断...');
   
   try {
+    // 创建Google搜索引擎实例
+    const engine = new GoogleSearchEngine();
+    
+    // 初始化引擎
+    log.debug('初始化搜索引擎...');
+    await engine.initialize({
+      useSystemBrowser: false
+    });
+    
+    // 执行一个简单查询
+    log.debug('执行诊断查询...');
+    const result = await engine.getSuggestions('test query');
+    
+    log.success(`查询成功! 返回${result.suggestions.length}个结果.`);
+    
+    // 关闭引擎
+    await engine.close();
+    
+    return true;
+  } catch (error) {
+    handleError(error);
+    log.error(`网络诊断失败: ${(error as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * 运行LLM服务诊断
+ */
+async function runLLMDiagnostics() {
+  log.info('开始运行LLM服务诊断...');
+  
+  if (!config.llm.apiKey) {
+    log.warn('未找到LLM API密钥，请设置环境变量OPENAI_API_KEY');
+    return false;
+  }
+  
+  try {
+    // 创建LLM服务实例
+    const llmService = new LLMService();
+    
+    // 执行简单的提示
+    log.debug('向LLM发送测试提示...');
+    const response = await llmService.sendPrompt(
+      '返回一个JSON，包含三个关键词类别：{"informational":["example"],"commercial":["example"],"educational":["example"]}'
+    );
+    
+    log.debug(`LLM响应: ${response.substring(0, 100)}...`);
+    
+    // 尝试解析JSON
+    try {
+      const parsedResponse = llmService.parseJsonResponse<any>(response);
+      log.success('JSON解析成功!');
+    } catch (error) {
+      log.warn(`JSON解析失败: ${(error as Error).message}`);
+    }
+    
+    return true;
+  } catch (error) {
+    handleError(error);
+    log.error(`LLM服务诊断失败: ${(error as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * 运行搜索引擎诊断
+ */
+async function runSearchEngineDiagnostics(keyword: string = 'test') {
+  log.info(`开始运行搜索引擎诊断(关键词: ${keyword})...`);
+  
+  try {
+    // 创建Google搜索引擎实例
+    const engine = new GoogleSearchEngine();
+    
+    // 初始化引擎
+    log.debug('初始化搜索引擎...');
+    await engine.initialize({
+      useSystemBrowser: false
+    });
+    
     // 执行查询
-    const startTime = Date.now();
-    const result = await engine.fetchAutocomplete(keyword, {
-      useSystemBrowser: false, // 使用临时浏览器更容易调试
-      enableSecondRound: false // 初始调试仅执行一轮查询
-    });
-    const endTime = Date.now();
+    log.debug(`执行查询: "${keyword}"...`);
+    const result = await engine.getSuggestions(keyword);
     
-    // 记录执行时间
-    logger.debug(`查询执行时间: ${endTime - startTime}ms`);
-    
-    // 记录结果统计
-    logger.info(`查询完成，获取到 ${result.suggestions.length} 条建议`);
-    logger.debug('查询结果:');
+    log.success(`查询成功! 返回${result.suggestions.length}个结果:`);
     result.suggestions.forEach((suggestion, index) => {
-      logger.debug(`  ${index + 1}. ${suggestion}`);
+      console.log(`  ${index + 1}. ${suggestion}`);
     });
     
-    // 保存结果到调试目录
-    const resultsFile = path.join(
-      debugConfig.logPath, 
-      `google_${keyword.replace(/\s+/g, '_')}_debug_results.json`
-    );
-    fs.writeFileSync(
-      resultsFile, 
-      JSON.stringify(result, null, 2)
-    );
-    logger.info(`调试结果已保存到: ${resultsFile}`);
+    // 关闭引擎
+    await engine.close();
     
-    return result;
+    return true;
   } catch (error) {
-    logger.error(`调试查询失败: ${error instanceof Error ? error.message : String(error)}`, true);
-    throw error;
-  } finally {
-    // 清理资源
-    await engine.cleanup();
+    handleError(error);
+    log.error(`搜索引擎诊断失败: ${(error as Error).message}`);
+    return false;
   }
 }
 
-// 诊断网络问题
-async function diagnoseNetworkIssues() {
-  logger.info('开始诊断网络连接问题...');
+/**
+ * 运行综合诊断
+ */
+async function runFullDiagnostics() {
+  log.info('开始运行综合诊断...');
+  
+  // 网络诊断
+  const networkResult = await runNetworkDiagnostics();
+  log.info(`网络诊断: ${networkResult ? '成功' : '失败'}`);
+  
+  // LLM服务诊断
+  const llmResult = await runLLMDiagnostics();
+  log.info(`LLM服务诊断: ${llmResult ? '成功' : '失败'}`);
+  
+  // 搜索引擎诊断
+  const searchResult = await runSearchEngineDiagnostics();
+  log.info(`搜索引擎诊断: ${searchResult ? '成功' : '失败'}`);
+  
+  // 总结
+  if (networkResult && llmResult && searchResult) {
+    log.success('所有诊断项目通过!');
+    return true;
+  } else {
+    log.warn('部分诊断项目失败，请查看日志获取详细信息');
+    return false;
+  }
+}
+
+/**
+ * 主函数
+ */
+async function main() {
+  // 获取命令行参数
+  const args = process.argv.slice(2);
+  const command = args[0] || 'all';
+  const params = args.slice(1);
   
   try {
-    // 检查常见的搜索引擎域名连接
-    const domains = [
-      'www.google.com',
-      'www.google.co.uk',
-      'www.google.com.hk',
-      'www.bing.com',
-      'cn.bing.com'
-    ];
-    
-    // 使用Node的DNS模块检查DNS解析
-    const dns = require('dns');
-    const dnsPromises = dns.promises;
-    
-    for (const domain of domains) {
-      try {
-        logger.debug(`正在检查域名 ${domain} 的DNS解析...`);
-        const result = await dnsPromises.lookup(domain);
-        logger.debug(`域名 ${domain} 解析成功: ${result.address}`);
-      } catch (error) {
-        logger.error(`域名 ${domain} 解析失败: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    
-    logger.info('网络诊断完成');
-  } catch (error) {
-    logger.error(`网络诊断过程中出错: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-// 主函数
-async function main() {
-  try {
-    await init();
-    
-    // 获取命令行参数
-    const args = process.argv.slice(2);
-    
-    if (args.length === 0) {
-      // 没有参数时显示帮助信息
-      console.log(`
-调试运行器使用说明:
-node debug-runner.ts <命令> [选项]
-
-可用命令:
-  query <关键词>    执行Google搜索引擎查询并收集调试信息
-  network          诊断网络连接问题
-  help             显示此帮助信息
-
-示例:
-  node debug-runner.ts query "iphone"
-  node debug-runner.ts network
-`);
-      return;
-    }
-    
-    const command = args[0];
-    
-    if (command === 'query') {
-      const keyword = args[1] || 'test';
-      await runGoogleDebugQuery(keyword);
-    } else if (command === 'network') {
-      await diagnoseNetworkIssues();
-    } else if (command === 'help') {
-      console.log(`
-调试运行器使用说明:
-node debug-runner.ts <命令> [选项]
-
-可用命令:
-  query <关键词>    执行Google搜索引擎查询并收集调试信息
-  network          诊断网络连接问题
-  help             显示此帮助信息
-
-示例:
-  node debug-runner.ts query "iphone"
-  node debug-runner.ts network
-`);
-    } else {
-      logger.error(`未知命令: ${command}`);
+    switch (command) {
+      case 'network':
+        await runNetworkDiagnostics();
+        break;
+      case 'llm':
+        await runLLMDiagnostics();
+        break;
+      case 'search':
+        await runSearchEngineDiagnostics(params[0]);
+        break;
+      case 'query':
+        if (params.length === 0) {
+          throw new AppError('缺少查询关键词参数', ErrorType.VALIDATION);
+        }
+        await runSearchEngineDiagnostics(params[0]);
+        break;
+      case 'all':
+      default:
+        await runFullDiagnostics();
+        break;
     }
   } catch (error) {
-    logger.error(`执行调试运行器时出错: ${error instanceof Error ? error.message : String(error)}`);
+    handleError(error);
     process.exit(1);
   }
 }
 
 // 执行主函数
-main(); 
+if (require.main === module) {
+  main().catch(error => {
+    handleError(error);
+    process.exit(1);
+  });
+} 

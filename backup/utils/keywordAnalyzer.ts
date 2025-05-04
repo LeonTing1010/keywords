@@ -1,6 +1,6 @@
 import { LLMService } from './llmService';
 import { Logger } from './logger';
-import { KeywordCategories, AnalysisPlanResult } from '../types';
+import { KeywordCategories, AnalysisPlanResult, IterationHistory } from '../types';
 import { config } from '../config';
 
 /**
@@ -351,30 +351,26 @@ export class KeywordAnalyzer {
   }
   
   /**
-   * 分析已有结果并规划下一步查询
+   * 规划下一次迭代
+   * 分析当前关键词，识别模式和空缺，生成下一轮查询策略
    */
   async planNextIteration(
     originalKeyword: string, 
-    currentKeywords: string[]
+    currentKeywords: string[],
+    iterationHistory: IterationHistory[] = []
   ): Promise<AnalysisPlanResult> {
     try {
-      this.logger.info(`为 "${originalKeyword}" 规划下一轮迭代，基于 ${currentKeywords.length} 个关键词`);
+      this.logger.info(`规划下一次迭代查询，当前已有 ${currentKeywords.length} 个关键词，历史迭代 ${iterationHistory.length} 轮`);
       
-      // 使用LLM规划下一轮
-      const result = await this.llmService.analyzeKeywords(
+      // 如果启用了LLM，则使用它生成下一轮查询策略
+      return await this.llmService.generateNextIterationStrategy(
         originalKeyword,
         currentKeywords,
-        'plan_next_iteration'
+        iterationHistory
       );
-      
-      if (result.gaps && result.recommendedQueries) {
-        return result as AnalysisPlanResult;
-      }
-      
-      // 如果返回格式不符合预期，使用基本规划
-      return this.createBasicIterationPlan(originalKeyword, currentKeywords);
     } catch (error) {
-      this.logger.error(`规划下一轮迭代失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(`规划下一次迭代失败: ${error instanceof Error ? error.message : String(error)}`);
+      // 如果LLM失败，使用基本的迭代规划
       return this.createBasicIterationPlan(originalKeyword, currentKeywords);
     }
   }
