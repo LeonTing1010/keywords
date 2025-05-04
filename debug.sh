@@ -38,7 +38,7 @@ echo -e "关键词: ${GREEN}$1${NC}"
 echo -e "日志文件: ${BLUE}${LOG_FILE}${NC}\n"
 
 # 设置环境变量并运行应用
-DEBUG=true ts-node --inspect keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
+DEBUG=true npx ts-node keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
 
 echo -e "\n${GREEN}调试会话完成${NC}"
 echo -e "日志已保存到: ${BLUE}${LOG_FILE}${NC}" 

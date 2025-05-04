@@ -42,23 +42,23 @@ main() {
   case $option in
     1)
       echo -e "\n${GREEN}启动浏览器网络日志调试...${NC}"
-      DEBUG=true DEBUG_NETWORK=true ts-node src/tools/debug-runner.ts network
+      DEBUG=true DEBUG_NETWORK=true npx ts-node src/tools/debug-runner.ts network
       ;;
     2)
       echo -e "\n${GREEN}启动浏览器事件调试...${NC}"
-      DEBUG=true DEBUG_EVENTS=true ts-node src/tools/debug-runner.ts events
+      DEBUG=true DEBUG_EVENTS=true npx ts-node src/tools/debug-runner.ts events
       ;;
     3)
       echo -e "\n${GREEN}启动搜索引擎接口调试...${NC}"
-      DEBUG=true DEBUG_SEARCH=true ts-node src/tools/debug-runner.ts search
+      DEBUG=true DEBUG_SEARCH=true npx ts-node src/tools/debug-runner.ts search
       ;;
     4)
       echo -e "\n${GREEN}启动 LLM 服务调试...${NC}"
-      DEBUG=true DEBUG_LLM=true ts-node src/tools/debug-runner.ts llm
+      DEBUG=true DEBUG_LLM=true npx ts-node src/tools/debug-runner.ts llm
       ;;
     5)
       echo -e "\n${GREEN}启动完整调试模式...${NC}"
-      DEBUG=true VERBOSE=true ts-node src/tools/debug-runner.ts all
+      DEBUG=true VERBOSE=true npx ts-node src/tools/debug-runner.ts all
       ;;
     q|Q)
       echo -e "\n${YELLOW}退出调试工具${NC}"

@@ -21,6 +21,9 @@ export class GoogleSearchEngine implements SearchEngine {
   private context: playwright.BrowserContext | null = null;
   private page: playwright.Page | null = null;
   private isInitialized = false;
+  private proxyServer: string | null = null;
+  private useSystem: boolean = true;
+  private customDomain: string | null = null;
   
   // Google搜索引擎配置
   private config: SearchEngineConfig = {
@@ -39,6 +42,33 @@ export class GoogleSearchEngine implements SearchEngine {
    */
   getConfig(): SearchEngineConfig {
     return this.config;
+  }
+  
+  /**
+   * 设置代理服务器
+   * @param proxyServer 代理服务器URL
+   */
+  setProxy(proxyServer: string): void {
+    this.proxyServer = proxyServer;
+    console.log(`[GoogleSearchEngine] 设置代理服务器: ${proxyServer}`);
+  }
+  
+  /**
+   * 设置是否使用系统浏览器
+   * @param useSystem 是否使用系统浏览器
+   */
+  useSystemBrowser(useSystem: boolean): void {
+    this.useSystem = useSystem;
+    console.log(`[GoogleSearchEngine] ${useSystem ? '使用系统浏览器' : '使用临时浏览器'}`);
+  }
+  
+  /**
+   * 设置自定义域名
+   * @param domain 自定义域名
+   */
+  setDomain(domain: string): void {
+    this.customDomain = domain;
+    console.log(`[GoogleSearchEngine] 设置自定义域名: ${domain}`);
   }
 
   /**

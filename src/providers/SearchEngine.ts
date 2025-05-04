@@ -1,5 +1,5 @@
 /**
- * KeywordNova 搜索引擎接口
+ * KeywordIntent 搜索引擎接口
  * 定义所有搜索引擎必须实现的功能
  */
 import { SearchOptions, AutocompleteSuggestion, SearchEngineConfig } from '../types';
@@ -31,4 +31,22 @@ export interface SearchEngine {
    * 关闭搜索引擎资源
    */
   close(): Promise<void>;
+  
+  /**
+   * 设置代理服务器
+   * @param proxyServer 代理服务器URL
+   */
+  setProxy(proxyServer: string): void;
+  
+  /**
+   * 设置是否使用系统浏览器
+   * @param useSystem 是否使用系统浏览器
+   */
+  useSystemBrowser(useSystem: boolean): void;
+  
+  /**
+   * 设置自定义域名
+   * @param domain 自定义域名
+   */
+  setDomain(domain: string): void;
 } 
