@@ -8,7 +8,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/keywordNova.ts",
+      "program": "${workspaceFolder}/keywordIntent.ts",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ],
@@ -29,7 +29,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/keywordNova.ts",
+      "program": "${workspaceFolder}/keywordIntent.ts",
       "args": [
         "test",
         "--engine",
@@ -60,7 +60,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/keywordNova.ts",
+      "program": "${workspaceFolder}/keywordIntent.ts",
       "args": [],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"

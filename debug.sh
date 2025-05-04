@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# KeywordNova 调试脚本
+# KeywordIntent 调试脚本
 # 用于在调试模式下运行应用
 
 # 启用严格模式
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # 打印标题
 echo -e "\n${BLUE}======================================${NC}"
-echo -e "${GREEN}     KeywordNova 调试模式${NC}"
+echo -e "${GREEN}     KeywordIntent 调试模式${NC}"
 echo -e "${BLUE}======================================${NC}\n"
 
 # 检查是否提供了关键词参数
@@ -31,14 +31,14 @@ mkdir -p logs/debug
 
 # 获取当前时间戳
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="logs/debug/keywordnova_debug_${TIMESTAMP}.log"
+LOG_FILE="logs/debug/keywordintent_debug_${TIMESTAMP}.log"
 
 echo -e "${YELLOW}启动调试会话...${NC}"
 echo -e "关键词: ${GREEN}$1${NC}"
 echo -e "日志文件: ${BLUE}${LOG_FILE}${NC}\n"
 
 # 设置环境变量并运行应用
-DEBUG=true ts-node --inspect keywordNova.ts "$@" 2>&1 | tee "$LOG_FILE"
+DEBUG=true ts-node --inspect keywordIntent.ts "$@" 2>&1 | tee "$LOG_FILE"
 
 echo -e "\n${GREEN}调试会话完成${NC}"
 echo -e "日志已保存到: ${BLUE}${LOG_FILE}${NC}" 

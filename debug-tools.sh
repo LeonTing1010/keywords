@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# KeywordNova 调试工具脚本
+# KeywordIntent 调试工具脚本
 # 用于启动各种调试模式
 
 # 启用严格模式
@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # 打印标题
 print_header() {
   echo -e "\n${BLUE}======================================${NC}"
-  echo -e "${GREEN}     KeywordNova 调试工具${NC}"
+  echo -e "${GREEN}     KeywordIntent 调试工具${NC}"
   echo -e "${BLUE}======================================${NC}\n"
 }
 
