@@ -5,6 +5,7 @@
  */
 import { SearchEngine } from '../providers/SearchEngine';
 import { GoogleSearchEngine } from '../providers/GoogleSearchEngine';
+import { BaiduSearchEngine } from '../providers/BaiduSearchEngine';
 import { SearchEngineType, SearchOptions } from '../types';
 import { handleError, ErrorType, AppError } from '../core/errorHandler';
 import * as path from 'path';
@@ -17,11 +18,13 @@ import { config } from '../config';
 
 // 创建搜索引擎实例的工厂函数
 function createSearchEngine(type: SearchEngineType) {
+  console.info(`[CLI] 创建搜索引擎: "${type}"`);
+  
   switch(type.toLowerCase()) {
     case 'google':
       return new GoogleSearchEngine();
     case 'baidu':
-      throw new AppError(`百度搜索引擎尚未实现`, ErrorType.VALIDATION);
+      return new BaiduSearchEngine();
     default:
       throw new AppError(`不支持的搜索引擎类型: ${type}`, ErrorType.VALIDATION);
   }
@@ -32,7 +35,7 @@ function createSearchEngine(type: SearchEngineType) {
  */
 function printHelp() {
   // 可用的搜索引擎
-  const availableEngines = ['google']; // 目前只有Google
+  const availableEngines = ['google', 'baidu']; // 更新为支持的引擎列表
   
   console.log(`
 KeywordNova - 意图挖掘与长尾关键词爆破系统 v2.0
@@ -56,11 +59,18 @@ AI分析选项:
   --max-iterations <次数>    最大迭代次数(默认: 5)
   --satisfaction <值>        满意度阈值(0-1之间，默认: 0.85)
 
+特性:
+  ⏱️ 断点续传              系统会自动保存检查点，如果程序中断，重新运行相同命令将从中断处继续
+  🔍 迭代式发现            通过多轮迭代查询挖掘长尾关键词
+  🧠 AI语义分析            使用大模型分析关键词意图和价值
+  🌐 多搜索引擎支持        支持Google和百度等多个搜索引擎
+
 示例:
   npx ts-node keywordNova.ts "iphone"                   # 使用默认配置进行迭代查询和AI分析
   npx ts-node keywordNova.ts "web design" --no-llm      # 禁用AI分析，仅使用迭代引擎
   npx ts-node keywordNova.ts "machine learning" --max-iterations 7   # 设置最大迭代次数
   npx ts-node keywordNova.ts "best laptops" --proxy http://127.0.0.1:7890
+  npx ts-node keywordNova.ts "人工智能" --engine baidu  # 使用百度搜索引擎
   `);
 }
 
@@ -98,6 +108,7 @@ function parseArguments(args: string[]): {
     
     if (arg === '--engine' || arg === '-e') {
       const engineName = args[++i];
+      
       if (engineName && (engineName === 'google' || engineName === 'baidu')) {
         engineType = engineName as SearchEngineType;
       } else {
@@ -158,6 +169,14 @@ function parseArguments(args: string[]): {
     throw new AppError('请提供一个搜索关键词', ErrorType.VALIDATION);
   }
   
+  // 记录关键配置信息
+  console.info(`[CLI] 关键词: "${keyword}", 搜索引擎: ${engineType}, 模型: ${llmModel}`);
+  console.info(`[CLI] 迭代次数: ${maxIterations}, 满意度阈值: ${satisfactionThreshold}`);
+  
+  if (proxyServer) {
+    console.info(`[CLI] 使用代理: ${proxyServer}`);
+  }
+  
   return {
     keyword,
     engineType,
@@ -189,9 +208,8 @@ export async function main() {
     // 解析命令行参数
     const options = parseArguments(args);
     
-    console.log(`KeywordNova - 意图挖掘与长尾关键词爆破系统`);
-    console.log(`======================================`);
-    console.log(`开始分析关键词: "${options.keyword}"`);
+    console.log(`\n======== KeywordNova 意图挖掘与长尾关键词爆破系统 ========`);
+    console.log(`开始分析关键词: "${options.keyword}"\n`);
     
     // 创建搜索引擎实例
     const engine = createSearchEngine(options.engineType);
@@ -212,10 +230,18 @@ export async function main() {
     const defaultFilename = `keywordnova_${options.keyword.replace(/\s+/g, '_')}_${timestamp}`;
     const outputFilename = options.outputFilename || defaultFilename;
     
-    console.log(`使用意图挖掘与关键词爆破引擎进行分析...`);
+    // 检查是否有检查点可恢复
+    const { CheckpointService } = require('../core/checkpointService');
+    const checkpointService = new CheckpointService(options.keyword);
+    if (checkpointService.hasCheckpoint()) {
+      console.log(`⏱️ 检测到关键词 "${options.keyword}" 的检查点，将从上次中断处继续执行`);
+      console.log(`💾 检查点将在每次迭代完成后自动保存，可以安全中断程序`);
+    }
     
     // 使用迭代发现引擎执行查询
     const iterativeEngine = new IterativeDiscoveryEngine(engine);
+    
+    console.log(`开始使用迭代发现引擎分析...`);
     
     const iterativeResult = await iterativeEngine.startDiscovery(
       options.keyword,
@@ -239,37 +265,36 @@ export async function main() {
       'utf-8'
     );
     
-    console.log(`\n分析完成!`);
-    console.log(`迭代次数: ${iterativeResult.totalIterations}`);
-    console.log(`发现关键词总数: ${iterativeResult.totalKeywordsDiscovered}`);
+    console.log(`\n📊 分析完成! 共 ${iterativeResult.totalIterations} 次迭代，发现 ${iterativeResult.totalKeywordsDiscovered} 个关键词`);
     
     // 如果启用了LLM分析，展示关键分析结果
     if (options.useLLM && iterativeResult.intentAnalysis) {
-      console.log(`\n意图分析结果:`);
+      console.log(`\n📈 意图分析结果:`);
       
       if (iterativeResult.highValueKeywords && iterativeResult.highValueKeywords.length > 0) {
-        console.log(`\n高价值长尾关键词:`);
+        console.log(`\n🔥 高价值长尾关键词 (Top ${Math.min(10, iterativeResult.highValueKeywords.length)}):`);
         iterativeResult.highValueKeywords.slice(0, 10).forEach((kw: string, index: number) => {
-          console.log(`${index + 1}. ${kw}`);
+          console.log(`  ${index + 1}. ${kw}`);
         });
       }
       
       if (iterativeResult.summary) {
-        console.log(`\n总结: ${iterativeResult.summary}`);
+        console.log(`\n📝 总结: ${iterativeResult.summary}`);
       }
     }
     
     // 清理资源
     await engine.close();
     
-    console.log(`\n结果已保存至: ${resultFilePath}`);
-    console.log(`可以在 ${outputDir} 目录下查看所有生成的文件`);
+    console.log(`\n💾 结果已保存至: ${resultFilePath}`);
     
   } catch (error) {
     handleError(error);
     
     // 显示错误提示信息
-    console.log(`\n执行出错，请参阅上方错误信息。可使用 --help 查看使用说明。`);
+    console.log(`\n❌ 执行出错，请参阅上方错误信息。`);
+    console.log(`🔄 如果是网络或API错误，可以重新执行相同命令，系统将从上次中断处继续执行。`);
+    console.log(`ℹ️ 使用 --help 查看使用说明。`);
     
     // 异常退出
     process.exit(1);

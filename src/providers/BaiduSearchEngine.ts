@@ -1,6 +1,6 @@
 /**
- * KeywordNova Google搜索引擎
- * 谷歌搜索自动补全建议获取实现
+ * KeywordNova 百度搜索引擎
+ * 百度搜索自动补全建议获取实现
  */
 import { SearchEngine } from './SearchEngine';
 import { 
@@ -14,21 +14,21 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 /**
- * Google搜索引擎实现
+ * 百度搜索引擎实现
  */
-export class GoogleSearchEngine implements SearchEngine {
+export class BaiduSearchEngine implements SearchEngine {
   private browser: playwright.Browser | null = null;
   private context: playwright.BrowserContext | null = null;
   private page: playwright.Page | null = null;
   private isInitialized = false;
   
-  // Google搜索引擎配置
+  // 百度搜索引擎配置
   private config: SearchEngineConfig = {
-    name: 'Google',
-    defaultDomain: 'www.google.com',
+    name: 'Baidu',
+    defaultDomain: 'www.baidu.com',
     supportsProxy: true,
     supportsSystemBrowser: true,
-    description: 'Google搜索引擎',
+    description: '百度搜索引擎',
     retryAttempts: 3,
     timeout: 60000,
     waitTime: 2000
@@ -65,7 +65,7 @@ export class GoogleSearchEngine implements SearchEngine {
     const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
     
     await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Encoding': 'gzip, deflate, br',
       'User-Agent': userAgent
@@ -141,7 +141,7 @@ export class GoogleSearchEngine implements SearchEngine {
       this.isInitialized = true;
     } catch (error) {
       throw new AppError(
-        `初始化Google搜索引擎失败: ${(error as Error).message}`,
+        `初始化百度搜索引擎失败: ${(error as Error).message}`,
         ErrorType.BROWSER,
         error as Error
       );
@@ -149,37 +149,32 @@ export class GoogleSearchEngine implements SearchEngine {
   }
   
   /**
-   * 处理 Google 的 Cookie 确认对话框
+   * 处理百度的隐私政策/Cookie确认对话框
    */
-  private async handleCookieConsent(page: playwright.Page): Promise<void> {
+  private async handlePrivacyConsent(page: playwright.Page): Promise<void> {
     try {
-      const cookieSelectors = [
-        'button[id="L2AGLb"]', // "我同意"按钮
-        'button:has-text("Accept all")',
-        'button:has-text("Agree")',
-        'button:has-text("I agree")',
-        'button:has-text("Accept")',
-        'button:has-text("Reject")',
-        'button:has-text("拒绝")',
+      const consentSelectors = [
+        '#app-agree-btn', // 同意按钮
+        '.fc-footer-buttons-yes', // 同意按钮
+        '.privacy-box button', // 隐私政策弹窗中的按钮
         'button:has-text("同意")',
+        'button:has-text("确定")',
         'button:has-text("接受")',
-        'button:has-text("全部接受")',
-        '[aria-label="Accept all"]',
-        '[aria-label="Reject all"]'
+        'button:has-text("我同意")'
       ];
       
-      for (const selector of cookieSelectors) {
+      for (const selector of consentSelectors) {
         const button = await page.$(selector);
         if (button) {
-          console.log(`找到Cookie确认按钮，使用选择器: ${selector}`);
+          console.log(`找到隐私政策确认按钮，使用选择器: ${selector}`);
           await button.click();
-          console.log('已点击Cookie确认按钮');
+          console.log('已点击隐私政策确认按钮');
           await this.randomDelay(1000, 2000); // 等待确认操作完成
           break;
         }
       }
     } catch (e) {
-      console.log('未发现Cookie确认对话框或已处理');
+      console.log('未发现隐私政策确认对话框或已处理');
     }
   }
 
@@ -233,7 +228,7 @@ export class GoogleSearchEngine implements SearchEngine {
       // 构建URL
       const url = `https://${domain}/`;
       
-      // 导航到谷歌 - 只等待DOM内容加载，不等待网络空闲
+      // 导航到百度首页
       console.log(`正在访问 ${url}...`);
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
       
@@ -241,17 +236,17 @@ export class GoogleSearchEngine implements SearchEngine {
       console.log('页面加载完成，等待稳定...');
       await this.randomDelay(1000, 2000);
       
-      // 处理Cookie确认对话框
-      await this.handleCookieConsent(this.page);
+      // 处理隐私政策确认对话框
+      await this.handlePrivacyConsent(this.page);
       
       // 查找搜索框
       console.log('正在查找搜索框...');
       let searchInput = null;
       const selectors = [
-        'input[name="q"]',
-        'input[title="Search"]',
-        'textarea[name="q"]',
-        'input[type="text"]'
+        '#kw',                // 百度主要搜索框ID
+        'input[name="wd"]',   // 百度搜索关键词参数
+        'input[type="text"]', // 备用选择器
+        '#index-kw'           // 另一个可能的搜索框ID
       ];
       
       for (const selector of selectors) {
@@ -268,7 +263,7 @@ export class GoogleSearchEngine implements SearchEngine {
       }
       
       if (!searchInput) {
-        throw new Error('无法找到Google搜索框');
+        throw new Error('无法找到百度搜索框');
       }
       
       // 输入关键词
@@ -278,12 +273,11 @@ export class GoogleSearchEngine implements SearchEngine {
       await searchInput.fill(''); // 清空当前内容
       await this.randomDelay(200, 500);
       await searchInput.fill(keyword);
-      await searchInput.fill(' ');
       await this.randomDelay(800, 1500); // 等待自动补全出现
       
       // 等待自动补全结果出现
       console.log('等待自动补全结果...');
-      const suggestionSelector = 'ul[role="listbox"] li, .sbct';
+      const suggestionSelector = '.bdsug-store ul li, .bdsug ul li, .bdsug-list li';
       await this.page.waitForSelector(suggestionSelector, { 
         timeout: this.config.waitTime || 2000 
       }).catch(() => {
@@ -315,11 +309,11 @@ export class GoogleSearchEngine implements SearchEngine {
     } catch (error) {
       // 保存错误截图
       if (this.page) {
-        await this.saveErrorScreenshot(this.page, 'error-google');
+        await this.saveErrorScreenshot(this.page, 'error-baidu');
       }
       
       throw new AppError(
-        `获取Google搜索建议失败: ${(error as Error).message}`,
+        `获取百度搜索建议失败: ${(error as Error).message}`,
         ErrorType.BROWSER,
         error as Error
       );
@@ -332,42 +326,25 @@ export class GoogleSearchEngine implements SearchEngine {
    * @returns 提取到的建议数组
    */
   private async extractSuggestions(page: playwright.Page): Promise<string[]> {
-    return await page.$$eval('ul[role="listbox"] li, [role="listbox"] [role="option"]', els => {
+    return await page.$$eval('.bdsug-store ul li, .bdsug ul li, .bdsug-list li', els => {
       return els.map(el => {
         // 尝试从不同的元素结构中提取文本
-        // 1. 首先尝试获取只包含文本的子元素
-        const textSpan = el.querySelector('.wM6W7d, .G43f7e, .zRAEtc, .sbl1');
-        if (textSpan && textSpan.textContent) {
-          return textSpan.textContent.trim();
+        // 1. 先查找是否有特定的结构，如百度红色的热搜标签
+        const hotTag = el.querySelector('.bdsug-hot');
+        const plainText = el.textContent || '';
+        
+        // 如果有热搜标签，需要移除热搜两个字
+        if (hotTag) {
+          return plainText.replace('热搜', '').trim();
         }
         
-        // 2. 尝试获取第一个div或span子元素
-        const firstChild = el.querySelector('div:first-child, span:first-child');
-        if (firstChild && firstChild.textContent) {
-          return firstChild.textContent.trim();
-        }
-        
-        // 3. 备选方案：从完整文本中提取第一行
-        const fullText = el.textContent || '';
-        const firstLine = fullText.split('\n')[0].trim();
-        if (firstLine.length > 0 && firstLine.length < 100) {
-          return firstLine;
-        }
-        
-        // 4. 如果上述都失败，使用最原始的提取并尝试过滤
-        return (el.textContent || '')
-          .trim()
-          .replace(/\{.*?\}/g, '')
-          .split('\n')[0]
-          .substring(0, 100);
+        // 2. 直接获取文本内容
+        return plainText.trim();
       }).filter(text => 
-        // 过滤掉明显是代码的结果
+        // 过滤空结果
         text && 
         text.length > 0 && 
-        text.length < 100 &&
-        !text.includes('{') &&
-        !text.includes(';}') &&
-        !text.match(/^[.#]\w+/)
+        text.length < 100
       );
     });
   }
@@ -386,7 +363,7 @@ export class GoogleSearchEngine implements SearchEngine {
       }
     } catch (error) {
       throw new AppError(
-        `关闭Google搜索引擎失败: ${(error as Error).message}`,
+        `关闭百度搜索引擎失败: ${(error as Error).message}`,
         ErrorType.BROWSER,
         error as Error
       );

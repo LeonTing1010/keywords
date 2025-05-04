@@ -12,7 +12,9 @@
     "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
     "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
     "simple": "ts-node keywordNova.ts --no-llm",
-    "analyze": "ts-node keywordNova.ts"
+    "analyze": "ts-node keywordNova.ts",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "keywords": [
     "seo",
@@ -30,11 +32,15 @@
     "@playwright/test": "^1.52.0",
     "@types/axios": "^0.14.0",
     "@types/handlebars": "^4.1.0",
-    "@types/node": "^22.15.3"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.2"
   },
   "dependencies": {
     "@types/fs-extra": "^11.0.4",
     "axios": "^1.6.7",
+    "dotenv": "^16.5.0",
     "fs-extra": "^11.3.0",
     "handlebars": "^4.7.8",
     "ts-node": "^10.9.2",

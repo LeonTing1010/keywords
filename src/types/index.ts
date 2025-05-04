@@ -104,6 +104,8 @@ export interface EvaluationDimensions {
   novelty: number;              // 新颖性
   searchVolumePotential: number; // 搜索量潜力
   goalAchievement: number;      // 目标达成率
+  domainCoverage: number;       // 领域覆盖度（跨行业/主题领域的广度）
+  repetitionPenalty: number;    // 重复度惩罚（降低重复关键词的价值）
 }
 
 /**
@@ -166,6 +168,9 @@ export interface IntentAnalysisResult {
   summary: string;                 // 总结
   insights: string[];              // 关键洞察
   bestPatterns: string[];          // 最佳查询模式
+  domainDistribution: Record<string, number>; // 领域分布百分比
+  underrepresentedDomains: string[]; // 未充分探索的领域
+  diversityAnalysis: Record<string, any>; // 多样性分析
 }
 
 /**
@@ -192,6 +197,7 @@ export interface LLMServiceOptions {
   model?: string;                  // 模型
   timeout?: number;                // 超时时间
   maxRetries?: number;             // 最大重试次数
+  baseURL?: string;                // API基础URL
 }
 
 // 重新导出搜索引擎相关类型
@@ -231,3 +237,11 @@ export interface Credentials {
   email: string;
   password: string;
 }
+
+/**
+ * Type definitions index file
+ * Re-exports all types from the keyword types file
+ */
+
+// Re-export all types from keywordTypes.ts
+export * from './keywordTypes';

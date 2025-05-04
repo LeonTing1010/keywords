@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { config } from '../config';
 import { ErrorType, AppError, handleError } from '../core/errorHandler';
+import { CheckpointService, DiscoveryCheckpoint } from '../core/checkpointService';
 
 /**
  * 迭代发现引擎
@@ -26,6 +27,7 @@ export class IterativeDiscoveryEngine {
   private intentAnalyzer: IntentAnalyzer | null = null;
   private discoveredKeywords: Set<string> = new Set();
   private iterationHistory: IterationHistory[] = [];
+  private checkpointService: CheckpointService | null = null;
 
   /**
    * 创建迭代发现引擎实例
@@ -48,165 +50,294 @@ export class IterativeDiscoveryEngine {
     this.discoveredKeywords = new Set();
     this.iterationHistory = [];
     
+    // 初始化检查点服务
+    this.checkpointService = new CheckpointService(initialKeyword);
+    
+    // 检查是否存在检查点，如果有则恢复状态
+    const checkpoint = this.checkpointService.hasCheckpoint() ? 
+      this.checkpointService.restoreCheckpoint() : null;
+    
+    if (checkpoint) {
+      console.log(`[发现] 从检查点恢复，已完成 ${checkpoint.lastCompletedIteration} 次迭代`);
+      // 恢复状态
+      this.discoveredKeywords = new Set(checkpoint.discoveredKeywords);
+      this.iterationHistory = checkpoint.iterationHistory;
+    }
+    
     // 初始化LLM服务（如果启用）
     if (options.useLLM) {
-      this.llmService = new LLMService({
-        model: options.llmModel || config.llm.defaultModel
-      });
+      // 如果提供了模型名称，更新 config
+      if (options.llmModel) {
+        console.info(`[发现] LLM模型: ${options.llmModel}`);
+      }
+      
+      // 直接使用 config 创建 LLMService，不传递额外参数
+      this.llmService = new LLMService();
       this.intentAnalyzer = new IntentAnalyzer(this.llmService);
     }
     
     // 确定迭代参数
     const maxIterations = options.maxIterations || config.iterativeEngine.maxIterations;
-    const satisfactionThreshold = options.satisfactionThreshold || 
+    const baseThreshold = options.satisfactionThreshold || 
       config.iterativeEngine.defaultSatisfactionThreshold;
+    const minForcedIterations = config.iterativeEngine.minForcedIterations || 3;
     
-    // 执行初始查询
-    console.log(`Executing initial query: "${initialKeyword}"`);
-    let currentKeywords: string[] = [];
-    let queryType: 'initial' | 'iteration' = 'initial';
+    // 使用动态阈值设置
+    const useDynamicThreshold = config.iterativeEngine.dynamicThreshold?.enabled || false;
+    const initialThreshold = config.iterativeEngine.dynamicThreshold?.initial || baseThreshold;
+    const finalThreshold = config.iterativeEngine.dynamicThreshold?.final || baseThreshold;
+    const thresholdDecayRate = config.iterativeEngine.dynamicThreshold?.decayRate || 0.05;
+    
+    // 如果没有检查点，执行初始查询
+    if (!checkpoint) {
+      console.log(`[发现] 执行初始查询: "${initialKeyword}"`);
+      let currentKeywords: string[] = [];
+      
+      try {
+        // 执行初始搜索
+        const initialSuggestions = await this.searchEngine.getSuggestions(initialKeyword, options);
+        currentKeywords = initialSuggestions.suggestions;
+        
+        // 添加到已发现关键词集合
+        currentKeywords.forEach(keyword => this.discoveredKeywords.add(keyword));
+        
+        console.log(`[发现] 初始查询发现 ${currentKeywords.length} 个关键词`);
+        
+        // 记录初始迭代历史
+        this.iterationHistory.push({
+          iterationNumber: 0,
+          query: initialKeyword,
+          queryType: 'initial',
+          keywords: [...currentKeywords],
+          newKeywordsCount: currentKeywords.length,
+          satisfactionScore: 1.0, // 初始查询默认满意度为1.0
+          analysis: 'Initial query',
+          recommendedQueries: []
+        });
+        
+        // 保存初始检查点
+        this.saveCheckpoint(initialKeyword, 0);
+      } catch (error) {
+        handleError(error);
+        throw new AppError(
+          `初始查询失败: ${(error as Error).message}`,
+          ErrorType.UNKNOWN,
+          error as Error
+        );
+      }
+    }
+    
+    let queryType: 'initial' | 'iteration' = 'iteration';
     let currentQuery = initialKeyword;
     
     try {
-      // 执行初始搜索
-      const initialSuggestions = await this.searchEngine.getSuggestions(initialKeyword, options);
-      currentKeywords = initialSuggestions.suggestions;
-      
-      // 添加到已发现关键词集合
-      currentKeywords.forEach(keyword => this.discoveredKeywords.add(keyword));
-      
-      // 记录初始迭代历史
-      this.iterationHistory.push({
-        iterationNumber: 0,
-        query: initialKeyword,
-        queryType: 'initial',
-        keywords: [...currentKeywords],
-        newKeywordsCount: currentKeywords.length,
-        satisfactionScore: 1.0, // 初始查询默认满意度为1.0
-        analysis: 'Initial query',
-        recommendedQueries: []
-      });
-      
       // 执行迭代查询
-      let iterationCount = 0;
+      let iterationCount = checkpoint ? checkpoint.lastCompletedIteration : 0;
       let continueFetching = true;
       
       while (iterationCount < maxIterations && continueFetching) {
         iterationCount++;
-        queryType = 'iteration';
-        console.log(`\nExecuting iteration #${iterationCount}`);
+        console.log(`\n[发现] 执行迭代 #${iterationCount}`);
         
         // 确定下一轮查询
         if (this.intentAnalyzer && this.llmService) {
-          // 使用LLM分析规划下一轮查询
-          const planResult = await this.planNextIteration(
-            initialKeyword,
-            currentKeywords,
-            iterationCount
-          );
-          
-          // 如果有推荐查询，使用第一个作为下一轮查询
-          if (planResult.recommendedQueries.length > 0) {
-            currentQuery = planResult.recommendedQueries[0];
-            console.log(`Selected query based on analysis: "${currentQuery}"`);
-          } else {
-            // 使用初始关键词加变种
-            currentQuery = `${initialKeyword} best`;
-            console.log(`Using default query: "${currentQuery}"`);
+          try {
+            // 使用LLM分析规划下一轮查询
+            const planResult = await this.planNextIteration(
+              initialKeyword,
+              Array.from(this.discoveredKeywords),
+              iterationCount
+            );
+            
+            // 重新设计查询选择逻辑，确保多样性
+            if (planResult.recommendedQueries.length > 0) {
+              // 选择策略：优先使用不同的查询以增加多样性
+              // 在早期迭代和后期迭代使用不同的策略
+              if (iterationCount <= 2) {
+                // 早期迭代：选择最多样的查询，关注广度
+                // 使用索引轮换，确保我们不会重复使用建议列表中的相同位置
+                const index = (iterationCount - 1) % planResult.recommendedQueries.length;
+                currentQuery = planResult.recommendedQueries[index];
+                console.log(`[发现] 早期迭代选择查询 #${index+1}: "${currentQuery}" (优先广度)`);
+              } else if (iterationCount < maxIterations - 1) {
+                // 中期迭代：平衡广度和深度
+                // 识别与前几轮查询不同领域的查询
+                const previousQueries = this.iterationHistory
+                  .filter(h => h.iterationNumber > 0)
+                  .map(h => h.query.toLowerCase());
+                
+                // 查找领域差异最大的查询
+                // 简单启发式：挑选关键词前缀不同的查询
+                const diverseQuery = planResult.recommendedQueries.find(query => {
+                  const queryPrefix = query.split(' ')[0].toLowerCase();
+                  return !previousQueries.some(pq => pq.includes(queryPrefix));
+                });
+                
+                if (diverseQuery) {
+                  currentQuery = diverseQuery;
+                  console.log(`[发现] 中期迭代选择多样化查询: "${currentQuery}" (平衡广深)`);
+                } else {
+                  // 如果找不到差异明显的查询，使用推荐列表的第二个查询（避免总是使用第一个）
+                  const index = Math.min(1, planResult.recommendedQueries.length - 1);
+                  currentQuery = planResult.recommendedQueries[index];
+                  console.log(`[发现] 中期迭代选择查询 #${index+1}: "${currentQuery}"`);
+                }
+              } else {
+                // 后期迭代：专注于高潜力查询，偏向深度
+                // 使用LLM认为最有价值的查询（通常是第一个推荐）
+                currentQuery = planResult.recommendedQueries[0];
+                console.log(`[发现] 后期迭代选择最高价值查询: "${currentQuery}" (优先深度)`);
+              }
+            } else {
+              // 使用初始关键词加变种
+              currentQuery = `${initialKeyword} best`;
+              console.log(`[发现] 使用默认查询: "${currentQuery}"`);
+            }
+          } catch (error) {
+            console.error(`[发现] 规划下一轮查询失败: ${(error as Error).message}`);
+            // 使用备选查询策略
+            const variants = ['how', 'best', 'tutorial', 'problems', 'compare'];
+            currentQuery = `${initialKeyword} ${variants[iterationCount % variants.length]}`;
+            console.log(`[发现] 使用备用查询策略: "${currentQuery}"`);
           }
         } else {
           // 不使用LLM分析，使用简单变种
           const variants = ['how', 'best', 'tutorial', 'problems', 'compare'];
           currentQuery = `${initialKeyword} ${variants[iterationCount % variants.length]}`;
-          console.log(`Using default query variant: "${currentQuery}"`);
+          console.log(`[发现] 使用默认变种查询: "${currentQuery}"`);
         }
         
-        // 执行迭代查询
-        const iterationResult = await this.executeIteration(currentQuery, options);
-        const newKeywords = iterationResult.allSuggestions;
-        
-        // 计算新发现的关键词
-        const newDiscoveredKeywords = newKeywords.filter(
-          keyword => !this.discoveredKeywords.has(keyword)
-        );
-        
-        // 添加新关键词到发现集合
-        newDiscoveredKeywords.forEach(keyword => this.discoveredKeywords.add(keyword));
-        
-        // 计算满意度分数
-        let satisfactionScore = newDiscoveredKeywords.length / 
-          Math.max(config.iterativeEngine.minNewKeywordsPerIteration, 1);
-        satisfactionScore = Math.min(satisfactionScore, 1.0);
-        
-        // 创建当前迭代分析
-        let iterationAnalysis = `Discovered ${newDiscoveredKeywords.length} new keywords`;
-        let recommendedQueries: string[] = [];
-        
-        // 如果启用了LLM分析，评估迭代结果
-        if (this.intentAnalyzer && this.llmService) {
-          try {
-            const evaluationResult = await this.intentAnalyzer.evaluateIteration(
-              initialKeyword,
-              newDiscoveredKeywords,
-              iterationCount,
-              [`Discover long-tail keywords`, `Increase coverage for ${initialKeyword} related areas`]
-            );
-            
-            // 使用评估结果更新满意度
-            satisfactionScore = evaluationResult.overallScore / 10;
-            iterationAnalysis = evaluationResult.analysis;
-            
-            // 获取下一轮推荐查询
-            const planResult = await this.planNextIteration(
-              initialKeyword,
-              [...this.discoveredKeywords],
-              iterationCount + 1
-            );
-            recommendedQueries = planResult.recommendedQueries;
-            
-            // 调整是否继续迭代
-            continueFetching = 
-              satisfactionScore < satisfactionThreshold && 
-              evaluationResult.recommendContinue;
-          } catch (error) {
-            console.error(`LLM analysis evaluation failed: ${(error as Error).message}`);
-            // 评估失败时使用默认满意度计算
+        try {
+          // 执行迭代查询
+          const iterationResult = await this.executeIteration(currentQuery, options);
+          const newKeywords = iterationResult.allSuggestions;
+          
+          // 计算新发现的关键词
+          const newDiscoveredKeywords = newKeywords.filter(
+            keyword => !this.discoveredKeywords.has(keyword)
+          );
+          
+          // 添加新关键词到发现集合
+          newDiscoveredKeywords.forEach(keyword => this.discoveredKeywords.add(keyword));
+          
+          // 分析关键词多样性，检测是否集中在单一领域
+          const domainFocusCheck = this.analyzeDomainFocus(newDiscoveredKeywords, currentQuery);
+          if (domainFocusCheck.excessiveFocus) {
+            console.warn(`[发现] 警告：当前关键词集中在 "${domainFocusCheck.dominantDomain}" 领域 (${domainFocusCheck.focusPercentage.toFixed(1)}%)，下轮将强制选择不同领域`);
           }
-        } else {
-          // 没有LLM分析时基于新发现关键词数量决定是否继续
-          continueFetching = 
-            satisfactionScore < satisfactionThreshold && 
-            newDiscoveredKeywords.length >= config.iterativeEngine.minNewKeywordsPerIteration;
-        }
-        
-        // 记录迭代历史
-        this.iterationHistory.push({
-          iterationNumber: iterationCount,
-          query: currentQuery,
-          queryType: 'iteration',
-          queryResults: iterationResult.queryResults,
-          keywords: newDiscoveredKeywords,
-          newKeywordsCount: newDiscoveredKeywords.length,
-          satisfactionScore,
-          analysis: iterationAnalysis,
-          recommendedQueries
-        });
-        
-        console.log(`Iteration #${iterationCount} completed. New keywords discovered: ${newDiscoveredKeywords.length}`);
-        console.log(`Satisfaction score: ${(satisfactionScore * 100).toFixed(1)}%`);
-        
-        // 如果满意度达到阈值或没有新关键词，停止迭代
-        if (
-          satisfactionScore >= satisfactionThreshold || 
-          newDiscoveredKeywords.length === 0
-        ) {
-          console.log(`Satisfaction threshold reached or no new keywords found. Stopping iterations.`);
-          continueFetching = false;
+          
+          // 计算满意度分数
+          let satisfactionScore = newDiscoveredKeywords.length / 
+            Math.max(config.iterativeEngine.minNewKeywordsPerIteration, 1);
+          satisfactionScore = Math.min(satisfactionScore, 1.0);
+          
+          // 创建当前迭代分析
+          let iterationAnalysis = `发现 ${newDiscoveredKeywords.length} 个新关键词`;
+          let recommendedQueries: string[] = [];
+          
+          // 如果启用了LLM分析，评估迭代结果
+          if (this.intentAnalyzer && this.llmService) {
+            try {
+              const evaluationResult = await this.intentAnalyzer.evaluateIteration(
+                initialKeyword,
+                newDiscoveredKeywords,
+                iterationCount,
+                [`Discover long-tail keywords`, `Increase coverage for ${initialKeyword} related areas`]
+              );
+              
+              // 使用评估结果更新满意度
+              satisfactionScore = evaluationResult.overallScore / 10;
+              iterationAnalysis = evaluationResult.analysis;
+              
+              // 获取下一轮推荐查询
+              const planResult = await this.planNextIteration(
+                initialKeyword,
+                Array.from(this.discoveredKeywords),
+                iterationCount + 1
+              );
+              recommendedQueries = planResult.recommendedQueries;
+              
+              // 计算当前迭代的动态阈值
+              let currentThreshold = baseThreshold;
+              if (useDynamicThreshold) {
+                // 线性插值计算当前迭代的阈值
+                const progress = Math.min(iterationCount / maxIterations, 1);
+                currentThreshold = initialThreshold - (initialThreshold - finalThreshold) * progress;
+                console.log(`[发现] 迭代 #${iterationCount} 使用动态阈值: ${currentThreshold.toFixed(2)}`);
+              }
+              
+              // 调整是否继续迭代
+              // 1. 未达到最小强制迭代次数时强制继续
+              // 2. 满意度低于阈值且评估建议继续时继续
+              continueFetching = 
+                iterationCount < minForcedIterations || 
+                (satisfactionScore < currentThreshold && evaluationResult.recommendContinue);
+              
+              // 如果强制继续，记录原因
+              if (iterationCount < minForcedIterations && satisfactionScore >= currentThreshold) {
+                console.log(`[发现] 满意度已达 ${(satisfactionScore * 100).toFixed(1)}%，但未达最小迭代次数(${minForcedIterations})，将继续迭代`);
+              }
+            } catch (error) {
+              console.error(`[发现] LLM分析评估失败: ${(error as Error).message}`);
+              // 评估失败时使用默认满意度计算
+              // 仍然遵循最小强制迭代逻辑
+              continueFetching = 
+                iterationCount < minForcedIterations || 
+                (satisfactionScore < baseThreshold && 
+                 newDiscoveredKeywords.length >= config.iterativeEngine.minNewKeywordsPerIteration);
+            }
+          } else {
+            // 没有LLM分析时基于新发现关键词数量决定是否继续
+            continueFetching = 
+              iterationCount < minForcedIterations || 
+              (satisfactionScore < baseThreshold && 
+               newDiscoveredKeywords.length >= config.iterativeEngine.minNewKeywordsPerIteration);
+          }
+          
+          // 记录迭代历史
+          this.iterationHistory.push({
+            iterationNumber: iterationCount,
+            query: currentQuery,
+            queryType: 'iteration',
+            queryResults: iterationResult.queryResults,
+            keywords: newDiscoveredKeywords,
+            newKeywordsCount: newDiscoveredKeywords.length,
+            satisfactionScore,
+            analysis: iterationAnalysis,
+            recommendedQueries
+          });
+          
+          console.log(`[发现] 迭代 #${iterationCount} 完成。新发现关键词: ${newDiscoveredKeywords.length}`);
+          console.log(`[发现] 满意度评分: ${(satisfactionScore * 100).toFixed(1)}%`);
+          
+          // 保存当前迭代的检查点
+          this.saveCheckpoint(initialKeyword, iterationCount, {
+            satisfactionScore,
+            lastQuery: currentQuery,
+            recommendedQueries
+          });
+          
+          // 如果已达到最大迭代次数或没有新关键词，停止迭代
+          if (iterationCount >= maxIterations || newDiscoveredKeywords.length === 0) {
+            if (iterationCount >= maxIterations) {
+              console.log(`[发现] 已达到最大迭代次数(${maxIterations})，停止迭代`);
+            } else if (newDiscoveredKeywords.length === 0) {
+              console.log(`[发现] 未发现新关键词，停止迭代`);
+            }
+            continueFetching = false;
+          }
+        } catch (error) {
+          console.error(`[发现] 迭代 #${iterationCount} 执行失败: ${(error as Error).message}`);
+          console.log(`[发现] 已保存检查点，可以重新启动程序继续执行`);
+          // 不会抛出异常，可以重新从检查点开始
+          throw error;
         }
       }
       
       // 转换为结果对象
-      const allKeywords = [...this.discoveredKeywords];
+      const allKeywords = Array.from(this.discoveredKeywords);
+      
+      console.log(`[发现] 关键词发现完成，共 ${allKeywords.length} 个关键词，${this.iterationHistory.length - 1} 次迭代`);
       
       // 生成发现结果
       const discoveryResult: DiscoveryResult = {
@@ -219,7 +350,7 @@ export class IterativeDiscoveryEngine {
         highValueKeywords: [],
         intentAnalysis: null,
         iterationHistory: this.iterationHistory,
-        summary: `Executed ${this.iterationHistory.length - 1} iterations and discovered ${allKeywords.length} keywords.`
+        summary: `执行了 ${this.iterationHistory.length - 1} 次迭代，发现了 ${allKeywords.length} 个关键词`
       };
       
       // 添加每次迭代的关键词
@@ -231,7 +362,7 @@ export class IterativeDiscoveryEngine {
       // 如果启用了LLM分析，生成最终分析报告
       if (this.intentAnalyzer && this.llmService) {
         try {
-          console.log(`Generating final intent analysis report...`);
+          console.log(`[发现] 生成最终意图分析报告...`);
           const finalAnalysis = await this.intentAnalyzer.generateFinalReport(
             initialKeyword,
             allKeywords,
@@ -241,15 +372,31 @@ export class IterativeDiscoveryEngine {
           discoveryResult.highValueKeywords = finalAnalysis.highValueKeywords;
           discoveryResult.summary = finalAnalysis.summary;
         } catch (error) {
-          console.error(`Failed to generate final analysis report: ${(error as Error).message}`);
+          console.error(`[发现] 生成最终分析报告失败: ${(error as Error).message}`);
         }
+      }
+      
+      // 清除检查点文件，因为已经成功完成
+      if (this.checkpointService) {
+        this.checkpointService.clearCheckpoint();
       }
       
       return discoveryResult;
     } catch (error) {
       handleError(error);
+      
+      // 如果有创建检查点，尝试从检查点生成部分结果
+      if (this.checkpointService && this.checkpointService.hasCheckpoint()) {
+        const checkpoint = this.checkpointService.restoreCheckpoint();
+        
+        if (checkpoint) {
+          console.log(`[发现] 从检查点恢复部分结果数据`);
+          return this.checkpointService.createResultFromCheckpoint(checkpoint);
+        }
+      }
+      
       throw new AppError(
-        `Keyword discovery process failed: ${(error as Error).message}`,
+        `关键词发现过程失败: ${(error as Error).message}`,
         ErrorType.UNKNOWN,
         error as Error
       );
@@ -284,6 +431,10 @@ export class IterativeDiscoveryEngine {
       }
       
       // 执行二级查询
+      if (secondaryQueries.length > 0) {
+        console.log(`[迭代] 执行 ${secondaryQueries.length} 个二级查询`);
+      }
+      
       for (const secondaryQuery of secondaryQueries) {
         try {
           // 添加随机延迟以避免被封锁
@@ -298,7 +449,7 @@ export class IterativeDiscoveryEngine {
           // 存储二级查询结果
           queryResults[secondaryQuery] = secondaryResult.suggestions;
         } catch (error) {
-          console.error(`Secondary query "${secondaryQuery}" failed: ${(error as Error).message}`);
+          console.error(`[迭代] 二级查询 "${secondaryQuery}" 失败: ${(error as Error).message}`);
           // 继续下一个查询
         }
       }
@@ -325,6 +476,8 @@ export class IterativeDiscoveryEngine {
         }
       }
       
+      console.log(`[迭代] 共获取 ${uniqueSuggestions.length} 个关键词建议`);
+      
       return {
         allSuggestions: uniqueSuggestions,
         queryResults,
@@ -332,6 +485,7 @@ export class IterativeDiscoveryEngine {
         newKeywordsCount: uniqueSuggestions.length
       };
     } catch (error) {
+      console.error(`[迭代] 迭代执行失败: ${(error as Error).message}`);
       throw new AppError(
         `Iteration execution failed: ${(error as Error).message}`,
         ErrorType.UNKNOWN,
@@ -400,15 +554,44 @@ export class IterativeDiscoveryEngine {
     }
     
     try {
-      return await this.intentAnalyzer.planNextIteration(
+      console.info(`[ENGINE_INFO] Starting next iteration planning for iteration #${nextIterationNumber}`);
+      console.info(`[ENGINE_INFO] Original keyword: "${originalKeyword}"`);
+      console.info(`[ENGINE_INFO] Total keywords so far: ${currentKeywords.length}`);
+      
+      const result = await this.intentAnalyzer.planNextIteration(
         originalKeyword,
         currentKeywords,
         nextIterationNumber,
         this.iterationHistory
       );
+      
+      console.info(`[ENGINE_INFO] Next iteration planning completed successfully`);
+      console.info(`[ENGINE_INFO] Got ${result.recommendedQueries.length} recommended queries`);
+      
+      return result;
     } catch (error) {
-      console.error(`Failed to plan next iteration: ${(error as Error).message}`);
+      console.error(`[ENGINE_ERROR] Failed to plan next iteration: ${(error as Error).message}`);
+      
+      // 检查是否为网络错误
+      if (error instanceof Error) {
+        const errorObj = error as any;
+        if (errorObj.code) {
+          console.error(`[ENGINE_ERROR] Network error detected. Error code: ${errorObj.code}`);
+          if (errorObj.code === 'ENOTFOUND') {
+            console.error(`[ENGINE_ERROR] DNS resolution failed. Check internet connection and DNS settings.`);
+            console.error(`[ENGINE_ERROR] Unable to connect to LLM API server.`);
+          } else if (errorObj.code === 'ECONNREFUSED') {
+            console.error(`[ENGINE_ERROR] Connection refused. The server may be down or firewall is blocking.`);
+          } else if (errorObj.code.startsWith('ETIMEOUT')) {
+            console.error(`[ENGINE_ERROR] Connection timed out. Check network connectivity or proxy settings.`);
+          }
+          
+          console.error(`[ENGINE_ERROR] Consider using a proxy with the --proxy parameter if you're behind a firewall.`);
+        }
+      }
+      
       // 返回默认规划结果
+      console.info(`[ENGINE_INFO] Using fallback query strategy due to LLM error`);
       return {
         gaps: ['Gaps could not be identified through LLM analysis'],
         patterns: [],
@@ -441,5 +624,54 @@ export class IterativeDiscoveryEngine {
     
     // 等待
     await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  
+  /**
+   * 保存当前状态到检查点
+   * @param originalKeyword 原始关键词
+   * @param lastCompletedIteration 最后完成的迭代编号
+   * @param engineState 引擎状态
+   */
+  private saveCheckpoint(
+    originalKeyword: string,
+    lastCompletedIteration: number,
+    engineState: {
+      satisfactionScore?: number;
+      lastQuery?: string;
+      recommendedQueries?: string[];
+    } = {}
+  ): void {
+    if (this.checkpointService) {
+      this.checkpointService.saveCheckpoint(
+        originalKeyword,
+        this.discoveredKeywords,
+        this.iterationHistory,
+        lastCompletedIteration,
+        engineState
+      );
+    }
+  }
+
+  /**
+   * 分析关键词多样性，检测是否集中在单一领域
+   * @param keywords 关键词列表
+   * @param query 查询关键词
+   * @returns 分析结果
+   */
+  private analyzeDomainFocus(keywords: string[], query: string): {
+    dominantDomain: string;
+    focusPercentage: number;
+    excessiveFocus: boolean;
+  } {
+    const domain = query.split(' ')[0].toLowerCase();
+    const domainKeywords = keywords.filter(keyword => keyword.toLowerCase().startsWith(domain));
+    const focusPercentage = (domainKeywords.length / keywords.length) * 100;
+    const excessiveFocus = focusPercentage > 80;
+    const dominantDomain = excessiveFocus ? domain : '';
+    return {
+      dominantDomain,
+      focusPercentage,
+      excessiveFocus
+    };
   }
 } 
