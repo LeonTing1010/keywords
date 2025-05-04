@@ -1,5 +1,5 @@
 /**
- * KeywordNova Google搜索引擎
+ * KeywordIntent Google搜索引擎
  * 谷歌搜索自动补全建议获取实现
  */
 import { SearchEngine } from './SearchEngine';

@@ -21,6 +21,9 @@ export class BaiduSearchEngine implements SearchEngine {
   private context: playwright.BrowserContext | null = null;
   private page: playwright.Page | null = null;
   private isInitialized = false;
+  private proxyServer: string | null = null;
+  private useSystem: boolean = true;
+  private customDomain: string | null = null;
   
   // 百度搜索引擎配置
   private config: SearchEngineConfig = {
@@ -39,6 +42,33 @@ export class BaiduSearchEngine implements SearchEngine {
    */
   getConfig(): SearchEngineConfig {
     return this.config;
+  }
+
+  /**
+   * 设置代理服务器
+   * @param proxyServer 代理服务器URL
+   */
+  setProxy(proxyServer: string): void {
+    this.proxyServer = proxyServer;
+    console.log(`[BaiduSearchEngine] 设置代理服务器: ${proxyServer}`);
+  }
+  
+  /**
+   * 设置是否使用系统浏览器
+   * @param useSystem 是否使用系统浏览器
+   */
+  useSystemBrowser(useSystem: boolean): void {
+    this.useSystem = useSystem;
+    console.log(`[BaiduSearchEngine] ${useSystem ? '使用系统浏览器' : '使用临时浏览器'}`);
+  }
+  
+  /**
+   * 设置自定义域名
+   * @param domain 自定义域名
+   */
+  setDomain(domain: string): void {
+    this.customDomain = domain;
+    console.log(`[BaiduSearchEngine] 设置自定义域名: ${domain}`);
   }
 
   /**
@@ -94,7 +124,7 @@ export class BaiduSearchEngine implements SearchEngine {
       // 创建浏览器启动选项 - 默认有头模式且使用系统浏览器
       const launchOptions: playwright.LaunchOptions = {
         headless: false,
-        channel: 'chrome', // 使用系统安装的Chrome浏览器
+        channel: this.useSystem ? 'chrome' : undefined, // 使用系统安装的Chrome浏览器或临时浏览器
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -105,9 +135,9 @@ export class BaiduSearchEngine implements SearchEngine {
       };
       
       // 如果配置了代理，添加代理设置
-      if (options?.proxyServer) {
+      if (this.proxyServer || options?.proxyServer) {
         launchOptions.proxy = {
-          server: options.proxyServer
+          server: this.proxyServer || options?.proxyServer || ''
         };
       }
       
@@ -223,7 +253,7 @@ export class BaiduSearchEngine implements SearchEngine {
     
     try {
       // 确定使用的域名
-      const domain = options?.domain || this.config.defaultDomain;
+      const domain = this.customDomain || options?.domain || this.config.defaultDomain;
       
       // 构建URL
       const url = `https://${domain}/`;

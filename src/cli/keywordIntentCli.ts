@@ -23,7 +23,7 @@ import { WorkflowController } from '../core/WorkflowController';
 import { config } from '../config';
 
 // 创建搜索引擎实例的工厂函数
-function createSearchEngine(type: SearchEngineType) {
+function createSearchEngine(type: SearchEngineType): SearchEngine {
   console.info(`[CLI] 创建搜索引擎: "${type}"`);
   
   switch(type.toLowerCase()) {
