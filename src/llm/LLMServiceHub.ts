@@ -20,6 +20,7 @@ export interface AnalysisOptions {
   temperature?: number;
   format?: 'text' | 'json';
   language?: string;
+  sessionId?: string;
 }
 
 // 会话元数据接口

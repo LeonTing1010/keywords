@@ -7,7 +7,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { GoogleSearchEngine } from '../providers/GoogleSearchEngine';
-import { LLMService } from '../intent/LLMService';
+import { BaiduSearchEngine } from '../providers/BaiduSearchEngine';
+import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { config } from '../config';
 import { AppError, ErrorType, handleError } from '../core/errorHandler';
 
@@ -43,8 +44,8 @@ async function runNetworkDiagnostics() {
   log.info('开始运行网络诊断...');
   
   try {
-    // 创建Google搜索引擎实例
-    const engine = new GoogleSearchEngine();
+    // 创建百度搜索引擎实例
+    const engine = new BaiduSearchEngine();
     
     // 初始化引擎
     log.debug('初始化搜索引擎...');
@@ -82,19 +83,26 @@ async function runLLMDiagnostics() {
   
   try {
     // 创建LLM服务实例
-    const llmService = new LLMService();
+    const llmService = new LLMServiceHub({
+      model: config.llm.defaultModel,
+      apiKey: config.llm.apiKey
+    });
     
     // 执行简单的提示
     log.debug('向LLM发送测试提示...');
     const response = await llmService.sendPrompt(
-      '返回一个JSON，包含三个关键词类别：{"informational":["example"],"commercial":["example"],"educational":["example"]}'
+      '返回一个JSON，包含三个关键词类别：{"informational":["example"],"commercial":["example"],"educational":["example"]}',
+      {
+        systemPrompt: '你是一个专业的关键词分析师。',
+        requireJson: true
+      }
     );
     
     log.debug(`LLM响应: ${response.substring(0, 100)}...`);
     
     // 尝试解析JSON
     try {
-      const parsedResponse = llmService.parseJsonResponse<any>(response);
+      const parsedResponse = JSON.parse(response);
       log.success('JSON解析成功!');
     } catch (error) {
       log.warn(`JSON解析失败: ${(error as Error).message}`);
@@ -111,12 +119,14 @@ async function runLLMDiagnostics() {
 /**
  * 运行搜索引擎诊断
  */
-async function runSearchEngineDiagnostics(keyword: string = 'test') {
-  log.info(`开始运行搜索引擎诊断(关键词: ${keyword})...`);
+async function runSearchEngineDiagnostics(keyword: string = 'test', engineType: string = 'baidu') {
+  log.info(`开始运行搜索引擎诊断(搜索引擎: ${engineType}, 关键词: ${keyword})...`);
   
   try {
-    // 创建Google搜索引擎实例
-    const engine = new GoogleSearchEngine();
+    // 创建搜索引擎实例
+    const engine = engineType.toLowerCase() === 'google' 
+      ? new GoogleSearchEngine() 
+      : new BaiduSearchEngine();
     
     // 初始化引擎
     log.debug('初始化搜索引擎...');
@@ -191,6 +201,12 @@ async function main() {
         break;
       case 'search':
         await runSearchEngineDiagnostics(params[0]);
+        break;
+      case 'google':
+        await runSearchEngineDiagnostics(params[0] || 'test', 'google');
+        break;
+      case 'baidu':
+        await runSearchEngineDiagnostics(params[0] || 'test', 'baidu');
         break;
       case 'query':
         if (params.length === 0) {

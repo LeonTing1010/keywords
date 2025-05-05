@@ -5,7 +5,8 @@
   "scripts": {
     "keywords": "ts-node keywordIntent.ts",
     "debug": "node --inspect-brk -r ts-node/register keywordIntent.ts",
-    "debug:google": "node --inspect-brk -r ts-node/register keywordIntent.ts test --engine google --temp-browser",
+    "debug:baidu": "node --inspect-brk -r ts-node/register keywordIntent.ts test --engine baidu",
+    "debug:google": "node --inspect-brk -r ts-node/register keywordIntent.ts test --engine google",
     "build": "tsc",
     "dev": "ts-node keywordIntent.ts",
     "debug:tools": "./debug-tools.sh",

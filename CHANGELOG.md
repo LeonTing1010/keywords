@@ -5,6 +5,54 @@
 格式基于[Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且项目遵循[语义化版本](https://semver.org/spec/v2.0.0.html)。
 
+## [3.2.0] - 2023-12-05
+
+### 简化
+- **系统架构优化**：简化整体系统架构，专注于核心功能
+  - 移除了复杂的`IterativeDiscoveryEngine`，替换为更简单的`SimpleKeywordDiscovery`
+  - 移除了静态意图分析功能，保留动态意图分析在`UserJourneySim`中
+  - 移除了`DomainExpertSystem`垂直行业分析模块
+  - 移除了`CrossDomainAnalyzer`跨领域分析模块
+  - 移除了`KeywordValuePredictor`关键词价值预测模块
+
+### 变更
+- **命令行参数更新**：
+  - 移除了`--journey-sim`选项（用户旅程模拟默认开启）
+  - 移除了`--value-predict`选项（相关功能已删除）
+  - 保留`--no-journey-sim`选项用于禁用旅程模拟
+- **更新工作流控制器**：
+  - 修改`WorkflowController`，移除已废弃组件的引用
+  - 简化配置接口，移除不必要的参数
+- **更新文档**：
+  - 重写README.md，准确反映简化后的系统功能和架构
+  - 更新CLI帮助信息，提供清晰的使用指导
+
+### 优化
+- 简化代码路径，提高系统稳定性和可维护性
+- 聚焦于两个核心功能：简单关键词发现和用户旅程模拟
+- 优化运行时性能，减少不必要的处理步骤
+
+## [3.1.0] - 2023-11-15
+
+### 变更
+- **搜索引擎默认修改**：将默认搜索引擎从Google更改为百度，更适合中文关键词分析
+- **简化命令行参数**：移除了大量非核心参数，减轻用户心智负担
+  - 移除了`--domain`参数（使用默认域名）
+  - 移除了`--temp-browser`参数（默认使用系统浏览器）
+  - 移除了`--max-results`参数（使用默认值300）
+  - 移除了`--max-iterations`参数（使用配置默认值）
+  - 移除了`--satisfaction`参数（使用默认阈值）
+  - 移除了`--depth`参数（使用默认分析深度5）
+  - 移除了`--cache`参数（使用默认24小时缓存）
+  - 移除了`--verbose`参数（默认简洁输出）
+  - 移除了`--no-intent-analysis`参数（意图分析为核心功能）
+- **更新文档**：更新README和命令行帮助信息，反映新的默认值和参数变化
+
+### 优化
+- 修复`WorkflowController`中的`getDominantIntents`方法，使其与`IntentAnalysisResult`接口兼容
+- 更新调试工具，支持百度搜索引擎作为默认选项
+- 优化配置处理逻辑，减少冗余代码
+
 ## [3.0.0] - 2023-10-15
 
 ### 项目重命名
