@@ -4,6 +4,15 @@
  */
 import { LLMServiceHub, AnalysisOptions } from '../llm/LLMServiceHub';
 import { SearchEngine } from '../providers/SearchEngine';
+import { JourneyEvaluator, JourneyEvaluationMetrics, RealJourneyData } from './JourneyEvaluator';
+import { AutocompleteService, AutocompleteSuggestion } from './AutocompleteService';
+import { 
+  AutocompleteParameters, 
+  DEFAULT_AUTOCOMPLETE_PARAMETERS,
+  AutocompleteBehaviorMetrics
+} from './AutocompleteParameters';
+import { AutocompleteEvaluator } from './AutocompleteEvaluator';
+
 
 // 旅程步骤接口
 export interface JourneyStep {
@@ -12,6 +21,12 @@ export interface JourneyStep {
   expectedResults: string[];
   userAction: string;
   reasoning: string;
+  // 自动补全相关属性
+  suggestedBy?: 'llm_only' | 'autocomplete' | 'enhanced_autocomplete'; // 查询来源
+  originalQuery?: string;   // 如果被替换，原始查询
+  position?: number;        // 如果来自自动补全，在建议列表中的位置
+  suggestionsShown?: AutocompleteSuggestion[]; // 展示的自动补全建议
+  semanticDeviation?: 'low' | 'medium' | 'high'; // 语义偏离程度
 }
 
 // 决策点接口
@@ -38,6 +53,7 @@ export interface UserJourney {
     intentShifts: number;
     refinementPatterns: string[];
     mainIntent: string;
+    autocompleteInfluence?: number;
   };
 }
 
@@ -47,6 +63,17 @@ export interface UserJourneySimConfig {
   searchEngine?: SearchEngine;
   maxSteps?: number;
   verbose?: boolean;
+  evaluator?: JourneyEvaluator;
+  autocompleteService?: AutocompleteService; // 自动补全服务
+  autocompleteParams?: AutocompleteParameters; // 自动补全参数
+  autocompleteEvaluator?: AutocompleteEvaluator; // 自动补全评估器
+}
+
+// 旅程评估结果接口
+export interface JourneyEvaluationResult {
+  journey: UserJourney;
+  metrics?: JourneyEvaluationMetrics;
+  realData?: RealJourneyData;
 }
 
 /**
@@ -58,12 +85,20 @@ export class UserJourneySim {
   private searchEngine?: SearchEngine;
   private maxSteps: number;
   private verbose: boolean;
+  private evaluator?: JourneyEvaluator;
+  private autocompleteService?: AutocompleteService;
+  private autocompleteParams: AutocompleteParameters;
+  private autocompleteEvaluator?: AutocompleteEvaluator;
   
   constructor(config: UserJourneySimConfig) {
     this.llmService = config.llmService;
     this.searchEngine = config.searchEngine;
     this.maxSteps = config.maxSteps || 5;
     this.verbose = config.verbose || false;
+    this.evaluator = config.evaluator;
+    this.autocompleteService = config.autocompleteService;
+    this.autocompleteParams = config.autocompleteParams || DEFAULT_AUTOCOMPLETE_PARAMETERS;
+    this.autocompleteEvaluator = config.autocompleteEvaluator;
     
     if (this.verbose) {
       console.info(`[UserJourneySim] 初始化完成，最大步骤: ${this.maxSteps}`);
@@ -78,51 +113,346 @@ export class UserJourneySim {
       console.info(`[UserJourneySim] 开始模拟搜索旅程，初始查询: "${initialQuery}"`);
     }
     
-    // 使用LLM模拟整个旅程
-    const journeyData = await this.llmService.simulateUserJourney(initialQuery, {
-      temperature: 0.7,
-      format: 'json'
-    });
+    try {
+      console.info(`[UserJourneySim] 调用LLM服务模拟用户旅程`);
+      // 使用LLM模拟整个旅程
+      const journeyData = await this.llmService.simulateUserJourney(initialQuery, {
+        temperature: 0.7,
+        format: 'json'
+      });
+      
+      console.info(`[UserJourneySim] LLM服务返回数据，开始验证数据有效性`);
+      // 验证journeyData是否有效
+      if (!journeyData || typeof journeyData !== 'object') {
+        console.warn('[UserJourneySim] LLM返回的旅程数据无效，使用默认结构');
+        
+        // 创建默认旅程
+        return this.createDefaultJourney(initialQuery);
+      }
+      
+      // 确保有steps属性
+      if (!journeyData.steps || !Array.isArray(journeyData.steps) || journeyData.steps.length === 0) {
+        console.warn('[UserJourneySim] LLM返回的旅程数据缺少有效的steps数组，添加默认步骤');
+        
+        // 添加默认步骤
+        journeyData.steps = [{
+          query: initialQuery,
+          intentType: "informational",
+          expectedResults: ["相关信息"],
+          userAction: "搜索查询",
+          reasoning: "初始查询"
+        }];
+      }
+      
+      console.info(`[UserJourneySim] 数据验证完成，开始旅程增强处理`);
+      // 初始化步骤并添加自动补全增强
+      if (this.autocompleteService) {
+        console.info(`[UserJourneySim] 检测到自动补全服务，开始自动补全增强`);
+        return await this.enhanceWithAutocomplete(journeyData);
+      }
+      
+      // 如果可用，使用实际搜索引擎数据增强模拟
+      if (this.searchEngine) {
+        console.info(`[UserJourneySim] 检测到搜索引擎，开始真实数据增强`);
+        return await this.enhanceWithRealSearchData(journeyData);
+      }
+      
+      console.info(`[UserJourneySim] 开始分析决策点`);
+      // 分析决策点
+      const decisionPoints = this.identifyDecisionPoints(journeyData.steps);
+      
+      console.info(`[UserJourneySim] 开始构建完整旅程`);
+      // 构建完整旅程
+      const journey: UserJourney = {
+        initialQuery,
+        steps: journeyData.steps,
+        decisionPoints,
+        finalQuery: journeyData.steps[journeyData.steps.length - 1].query,
+        summary: {
+          totalSteps: journeyData.steps.length,
+          intentShifts: decisionPoints.filter(dp => dp.intentShift).length,
+          refinementPatterns: this.identifyRefinementPatterns(journeyData.steps),
+          mainIntent: journeyData.mainIntent || 'not specified'
+        }
+      };
+      
+      if (this.verbose) {
+        console.info(`[UserJourneySim] 搜索旅程模拟完成，共 ${journey.steps.length} 步，${journey.decisionPoints.length} 个决策点`);
+      }
+      
+      return journey;
+    } catch (error) {
+      console.error(`[UserJourneySim] 模拟旅程时发生错误: ${error}`);
+      return this.createDefaultJourney(initialQuery);
+    }
+  }
+  
+  /**
+   * 创建默认旅程
+   * 当LLM返回的数据无效时使用
+   */
+  private createDefaultJourney(initialQuery: string): UserJourney {
+    const defaultStep: JourneyStep = {
+      query: initialQuery,
+      intentType: "informational",
+      expectedResults: ["相关信息"],
+      userAction: "搜索查询",
+      reasoning: "初始查询"
+    };
     
-    // 如果可用，使用实际搜索引擎数据增强模拟
-    if (this.searchEngine) {
-      return await this.enhanceWithRealSearchData(journeyData);
+    return {
+      initialQuery,
+      steps: [defaultStep],
+      decisionPoints: [],
+      finalQuery: initialQuery,
+      summary: {
+        totalSteps: 1,
+        intentShifts: 0,
+        refinementPatterns: [],
+        mainIntent: "informational"
+      }
+    };
+  }
+  
+  /**
+   * 使用自动补全建议增强旅程
+   */
+  private async enhanceWithAutocomplete(journeyData: any): Promise<UserJourney> {
+    if (!this.autocompleteService) {
+      throw new Error("自动补全服务未配置");
+    }
+    
+    if (this.verbose) {
+      console.info(`[UserJourneySim] 使用自动补全建议增强旅程`);
+    }
+    
+    const initialQuery = journeyData.initialQuery || journeyData.steps[0].query;
+    
+    // 初始化增强后的步骤列表
+    const enhancedSteps: JourneyStep[] = [];
+    
+    // 处理第一步
+    const firstStep = journeyData.steps[0];
+    firstStep.suggestedBy = 'llm_only'; // 第一步总是由LLM生成
+    firstStep.originalQuery = firstStep.query;
+    enhancedSteps.push(firstStep);
+    
+    // 为接下来的每一步获取自动补全建议
+    for (let i = 0; i < journeyData.steps.length - 1; i++) {
+      const currentStep = enhancedSteps[i];
+      const nextStepFromLLM = journeyData.steps[i + 1];
+      
+      // 获取当前查询的自动补全建议
+      const suggestions = await this.autocompleteService.getSuggestions(currentStep.query);
+      
+      // 记录显示的建议
+      currentStep.suggestionsShown = suggestions;
+      
+      // 使用自动补全调整下一步
+      const nextStep = await this.adjustNextStepWithAutocomplete(
+        currentStep,
+        nextStepFromLLM,
+        suggestions
+      );
+      
+      enhancedSteps.push(nextStep);
     }
     
     // 分析决策点
-    const decisionPoints = this.identifyDecisionPoints(journeyData.steps);
+    const decisionPoints = this.identifyDecisionPoints(enhancedSteps);
     
     // 构建完整旅程
     const journey: UserJourney = {
       initialQuery,
-      steps: journeyData.steps,
+      steps: enhancedSteps,
       decisionPoints,
-      finalQuery: journeyData.steps[journeyData.steps.length - 1].query,
+      finalQuery: enhancedSteps[enhancedSteps.length - 1].query,
       summary: {
-        totalSteps: journeyData.steps.length,
+        totalSteps: enhancedSteps.length,
         intentShifts: decisionPoints.filter(dp => dp.intentShift).length,
-        refinementPatterns: this.identifyRefinementPatterns(journeyData.steps),
-        mainIntent: journeyData.mainIntent || 'not specified'
+        refinementPatterns: this.identifyRefinementPatterns(enhancedSteps),
+        mainIntent: journeyData.mainIntent || 'not specified',
+        autocompleteInfluence: this.calculateAutocompleteInfluence(enhancedSteps)
       }
     };
     
     if (this.verbose) {
-      console.info(`[UserJourneySim] 搜索旅程模拟完成，共 ${journey.steps.length} 步，${journey.decisionPoints.length} 个决策点`);
+      const adoptedSteps = enhancedSteps.filter(step => 
+        step.suggestedBy === 'autocomplete' || step.suggestedBy === 'enhanced_autocomplete'
+      ).length;
+      
+      console.info(`[UserJourneySim] 自动补全增强完成，共 ${journey.steps.length} 步，采纳了 ${adoptedSteps} 个自动补全建议`);
     }
     
     return journey;
   }
   
   /**
+   * 根据自动补全建议调整下一步
+   */
+  private async adjustNextStepWithAutocomplete(
+    currentStep: JourneyStep,
+    nextStepFromLLM: JourneyStep,
+    suggestions: AutocompleteSuggestion[]
+  ): Promise<JourneyStep> {
+    console.info(`[UserJourneySim] 开始调整下一步，当前查询: "${currentStep.query}"`);
+
+    // 如果没有建议，使用LLM预测的下一步
+    if (!suggestions || suggestions.length === 0) {
+      console.info(`[UserJourneySim] 无自动补全建议，使用LLM预测的下一步`);
+      return {
+        ...nextStepFromLLM,
+        suggestedBy: 'llm_only',
+        originalQuery: nextStepFromLLM.query
+      };
+    }
+    
+    // 决定是否采用建议
+    if (Math.random() > this.autocompleteParams.overallAdoptionRate) {
+      console.info(`[UserJourneySim] 随机决定不采用自动补全建议，使用LLM预测`);
+      return {
+        ...nextStepFromLLM,
+        suggestedBy: 'llm_only',
+        originalQuery: nextStepFromLLM.query
+      };
+    }
+    
+    console.info(`[UserJourneySim] 开始对 ${suggestions.length} 个建议进行评分`);
+
+    // 对建议进行评分
+    const scoredSuggestions = await Promise.all(suggestions.map(async (suggestion, index) => {
+      const llmResult = await this.llmScoreSuggestion(currentStep.query, suggestion.query, nextStepFromLLM.intentType);
+      const positionWeight = index < this.autocompleteParams.positionWeights.length
+        ? this.autocompleteParams.positionWeights[index]
+        : this.autocompleteParams.positionWeights[this.autocompleteParams.positionWeights.length - 1];
+      const queryTypeMultiplier = this.autocompleteParams.queryTypeMultipliers[llmResult.intentType] || 1.0;
+      const deviationScore = this.autocompleteParams.semanticDeviation[llmResult.semanticDeviation];
+      const totalScore = positionWeight * llmResult.relevance * deviationScore * queryTypeMultiplier;
+      return {
+        suggestion,
+        score: totalScore,
+        deviationType: llmResult.semanticDeviation
+      };
+    }));
+    
+    // 按得分排序
+    scoredSuggestions.sort((a, b) => b.score - a.score);
+    
+    // 选择最高得分的建议
+    const bestSuggestion = scoredSuggestions[0];
+    
+    console.info(`[UserJourneySim] 最佳建议: "${bestSuggestion.suggestion.query}"，得分: ${bestSuggestion.score}`);
+    
+    // 如果最高得分低于阈值，使用LLM预测
+    if (bestSuggestion.score < this.autocompleteParams.relevanceThreshold) {
+      console.info(`[UserJourneySim] 最佳建议得分低于阈值 ${this.autocompleteParams.relevanceThreshold}，使用LLM预测`);
+      return {
+        ...nextStepFromLLM,
+        suggestedBy: 'llm_only',
+        originalQuery: nextStepFromLLM.query
+      };
+    }
+    
+    console.info(`[UserJourneySim] 采用自动补全建议: "${bestSuggestion.suggestion.query}"`);
+    
+    // 使用自动补全建议
+    return {
+      ...nextStepFromLLM,
+      query: bestSuggestion.suggestion.query,
+      reasoning: `${nextStepFromLLM.reasoning} (受到自动补全建议影响)`,
+      suggestedBy: 'autocomplete',
+      originalQuery: nextStepFromLLM.query,
+      position: bestSuggestion.suggestion.position,
+      semanticDeviation: bestSuggestion.deviationType
+    };
+  }
+  
+  /**
+   * 计算查询与建议之间的相关性
+   */
+  private async llmScoreSuggestion(query: string, suggestion: string, intentType: string): Promise<{
+    relevance: number,
+    semanticDeviation: 'low' | 'medium' | 'high',
+    intentType: string
+  }> {
+    const prompt = `
+原始查询: "${query}"
+自动补全建议: "${suggestion}"
+
+请完成以下任务：
+1. 相关性评分（0-1，1为完全相关，0为完全无关）：
+2. 语义偏离类型（low/medium/high，low为细微扩展，medium为相关但方向不同，high为完全无关）：
+3. 建议的查询意图类型（informational, commercial, transactional, navigational, comparison, research）：
+
+请以如下JSON格式输出：
+{
+  "relevance": <相关性分数>,
+  "semanticDeviation": "<low|medium|high>",
+  "intentType": "<intentType>"
+}
+    `.trim();
+
+    const llm = new LLMServiceHub();
+    const response = await llm.sendPrompt(prompt);
+    // 假设 response.text 是 LLM返回的JSON字符串
+    return llm.parseJsonResponse(response);
+  }
+  
+  /**
+   * 计算自动补全对旅程的影响度
+   */
+  private calculateAutocompleteInfluence(steps: JourneyStep[]): number {
+    const influencedSteps = steps.filter(step => 
+      step.suggestedBy === 'autocomplete' || step.suggestedBy === 'enhanced_autocomplete'
+    );
+    
+    return steps.length > 1 ? influencedSteps.length / (steps.length - 1) : 0;
+  }
+  
+  /**
    * 使用真实搜索引擎数据增强模拟
    */
   private async enhanceWithRealSearchData(journeyData: any): Promise<UserJourney> {
+    console.info(`[UserJourneySim] 开始使用真实搜索引擎数据增强模拟`);
+    
     // 这里可以实现与实际搜索引擎的交互
     // 获取真实的搜索结果和建议，增强模拟的真实性
     
-    // 目前仅返回原始数据
-    return {
-      initialQuery: journeyData.initialQuery,
+    // 检查journeyData结构是否完整
+    if (!journeyData || !journeyData.steps || !Array.isArray(journeyData.steps) || journeyData.steps.length === 0) {
+      console.warn('[UserJourneySim] 无效的旅程数据，使用默认结构');
+      
+      // 创建默认步骤
+      const defaultSteps: JourneyStep[] = [{
+        query: journeyData?.initialQuery || "default query",
+        intentType: "informational",
+        expectedResults: ["相关信息"],
+        userAction: "搜索查询",
+        reasoning: "初始查询"
+      }];
+      
+      console.info(`[UserJourneySim] 创建默认旅程，初始查询: "${defaultSteps[0].query}"`);
+      
+      // 返回默认旅程
+      return {
+        initialQuery: journeyData?.initialQuery || "default query",
+        steps: defaultSteps,
+        decisionPoints: [],
+        finalQuery: defaultSteps[0].query,
+        summary: {
+          totalSteps: 1,
+          intentShifts: 0,
+          refinementPatterns: [],
+          mainIntent: "informational"
+        }
+      };
+    }
+    
+    console.info(`[UserJourneySim] 开始处理有效旅程数据，共 ${journeyData.steps.length} 步`);
+    
+    // 正常处理有效数据
+    const enhancedJourney = {
+      initialQuery: journeyData.initialQuery || journeyData.steps[0].query,
       steps: journeyData.steps,
       decisionPoints: this.identifyDecisionPoints(journeyData.steps),
       finalQuery: journeyData.steps[journeyData.steps.length - 1].query,
@@ -133,12 +463,23 @@ export class UserJourneySim {
         mainIntent: journeyData.mainIntent || 'not specified'
       }
     };
+    
+    console.info(`[UserJourneySim] 真实数据增强完成，最终查询: "${enhancedJourney.finalQuery}"`);
+    console.info(`[UserJourneySim] 旅程统计: ${enhancedJourney.summary.totalSteps} 步，${enhancedJourney.summary.intentShifts} 次意图转换`);
+    
+    return enhancedJourney;
   }
   
   /**
    * 识别决策点
    */
   private identifyDecisionPoints(steps: JourneyStep[]): DecisionPoint[] {
+    // 添加步骤验证，防止undefined或空数组导致错误
+    if (!steps || !Array.isArray(steps) || steps.length === 0) {
+      console.warn('[UserJourneySim] 无效的步骤数组，无法识别决策点');
+      return [];
+    }
+    
     const decisionPoints: DecisionPoint[] = [];
     
     for (let i = 1; i < steps.length; i++) {
@@ -173,6 +514,12 @@ export class UserJourneySim {
    * 识别查询精炼模式
    */
   private identifyRefinementPatterns(steps: JourneyStep[]): string[] {
+    // 添加步骤验证，防止undefined或空数组导致错误
+    if (!steps || !Array.isArray(steps) || steps.length <= 1) {
+      console.warn('[UserJourneySim] 无效的步骤数组或步骤数量不足，无法识别查询精炼模式');
+      return [];
+    }
+    
     const patterns: Set<string> = new Set();
     
     for (let i = 1; i < steps.length; i++) {
@@ -249,19 +596,20 @@ export class UserJourneySim {
       patterns,
       summary: {
         totalJourneys: journeys.length,
-        averageSteps: journeys.reduce((sum, j) => sum + j.steps.length, 0) / journeys.length,
+        averageSteps: this.average(journeys.map(j => j.steps.length)),
+        commonIntents: this.getMostCommonIntents(journeys),
         commonRefinements: this.getMostCommonRefinements(journeys)
       }
     };
   }
   
   /**
-   * 提取多个旅程中的共同模式
+   * 提取共同模式
    */
   private extractCommonPatterns(journeys: UserJourney[]): Record<string, number> {
     const patternCounts: Record<string, number> = {};
     
-    // 统计模式出现频率
+    // 计算各种模式的出现频率
     journeys.forEach(journey => {
       journey.summary.refinementPatterns.forEach(pattern => {
         patternCounts[pattern] = (patternCounts[pattern] || 0) + 1;
@@ -272,14 +620,167 @@ export class UserJourneySim {
   }
   
   /**
-   * 获取最常见的查询精炼方式
+   * 获取最常见的查询精炼模式
    */
   private getMostCommonRefinements(journeys: UserJourney[]): string[] {
-    const patterns = this.extractCommonPatterns(journeys);
+    const patternCounts = this.extractCommonPatterns(journeys);
     
-    // 根据频率排序
-    return Object.entries(patterns)
+    // 按出现频率排序
+    return Object.entries(patternCounts)
       .sort((a, b) => b[1] - a[1])
       .map(([pattern]) => pattern);
+  }
+  
+  /**
+   * 获取最常见的意图类型
+   */
+  private getMostCommonIntents(journeys: UserJourney[]): string[] {
+    const intentCounts: Record<string, number> = {};
+    
+    // 收集所有步骤中的意图类型
+    journeys.forEach(journey => {
+      journey.steps.forEach(step => {
+        intentCounts[step.intentType] = (intentCounts[step.intentType] || 0) + 1;
+      });
+    });
+    
+    // 按出现频率排序
+    return Object.entries(intentCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([intent]) => intent);
+  }
+  
+  /**
+   * 计算平均值
+   */
+  private average(values: number[]): number {
+    if (values.length === 0) return 0;
+    return values.reduce((sum, val) => sum + val, 0) / values.length;
+  }
+  
+  /**
+   * 评估模拟旅程与真实数据的匹配度
+   * @param simulatedJourney 模拟生成的旅程
+   * @param realJourneyData 真实旅程数据
+   * @returns 评估指标
+   */
+  evaluateJourney(simulatedJourney: UserJourney, realJourneyData: RealJourneyData): JourneyEvaluationMetrics {
+    if (!this.evaluator) {
+      this.evaluator = new JourneyEvaluator({
+        llmService: this.llmService,
+        verbose: this.verbose
+      });
+    }
+    
+    return this.evaluator.evaluateJourney(simulatedJourney, realJourneyData);
+  }
+  
+  /**
+   * 模拟并评估用户旅程
+   * @param initialQuery 初始查询词
+   * @param realJourneyData 用于评估的真实旅程数据
+   * @returns 包含旅程和评估指标的结果
+   */
+  async simulateAndEvaluateJourney(initialQuery: string, realJourneyData?: RealJourneyData): Promise<JourneyEvaluationResult> {
+    // 模拟旅程
+    const journey = await this.simulateJourney(initialQuery);
+    
+    // 如果没有提供真实数据或未设置评估器，则仅返回旅程
+    if (!realJourneyData || !this.evaluator) {
+      return { journey };
+    }
+    
+    // 评估模拟旅程
+    const metrics = this.evaluateJourney(journey, realJourneyData);
+    
+    return {
+      journey,
+      metrics,
+      realData: realJourneyData
+    };
+  }
+  
+  /**
+   * 批量模拟并评估多个用户旅程
+   * @param initialQueries 初始查询词列表
+   * @param realJourneyDataSet 用于评估的真实旅程数据集
+   * @returns 包含所有旅程和评估结果的数组，以及整体评估指标
+   */
+  async batchSimulateAndEvaluate(
+    initialQueries: string[], 
+    realJourneyDataSet?: RealJourneyData[]
+  ): Promise<{
+    results: JourneyEvaluationResult[],
+    averageMetrics?: JourneyEvaluationMetrics
+  }> {
+    // 模拟所有旅程
+    const journeys = await Promise.all(
+      initialQueries.map(query => this.simulateJourney(query))
+    );
+    
+    // 如果没有提供真实数据或未设置评估器，则仅返回旅程
+    if (!realJourneyDataSet || !this.evaluator) {
+      return { 
+        results: journeys.map(journey => ({ journey }))
+      };
+    }
+    
+    // 批量评估
+    const batchResults = this.evaluator.evaluateBatch(journeys, realJourneyDataSet);
+    
+    // 构建结果
+    const results = journeys.map((journey, index) => ({
+      journey,
+      metrics: batchResults.individualScores[index],
+      realData: index < realJourneyDataSet.length ? realJourneyDataSet[index] : undefined
+    }));
+    
+    return {
+      results,
+      averageMetrics: batchResults.averageScore
+    };
+  }
+  
+  /**
+   * 评估模拟旅程中自动补全采纳行为与真实数据的匹配度
+   */
+  evaluateAutocompleteAdoption(
+    simulatedJourneys: UserJourney[],
+    realMetrics: AutocompleteBehaviorMetrics
+  ) {
+    if (!this.autocompleteEvaluator) {
+      this.autocompleteEvaluator = new AutocompleteEvaluator({
+        verbose: this.verbose
+      });
+    }
+    
+    return this.autocompleteEvaluator.evaluateAutocompleteAdoption(
+      simulatedJourneys,
+      realMetrics
+    );
+  }
+  
+  /**
+   * 模拟并评估用户旅程的自动补全采纳行为
+   */
+  async simulateAndEvaluateAutocompleteAdoption(
+    initialQueries: string[],
+    realMetrics: AutocompleteBehaviorMetrics
+  ) {
+    // 模拟旅程
+    const journeys = await Promise.all(
+      initialQueries.map(query => this.simulateJourney(query))
+    );
+    
+    // 评估自动补全采纳行为
+    const evaluationResult = this.evaluateAutocompleteAdoption(
+      journeys,
+      realMetrics
+    );
+    
+    return {
+      journeys,
+      evaluationResult
+    };
   }
 } 

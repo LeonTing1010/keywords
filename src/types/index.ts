@@ -63,10 +63,16 @@ export interface SearchOptions {
  * 自动补全建议结果
  */
 export interface AutocompleteSuggestion {
-  /** 搜索关键词 */
+  query: string;
+  position: number;
+  source: string;
+  timestamp: number;
+}
+
+// 如果需要返回带 keyword 的对象，单独定义
+export interface AutocompleteSuggestionResult {
   keyword: string;
-  /** 建议数组 */
-  suggestions: string[];
+  suggestions: AutocompleteSuggestion[];
 }
 
 // 意图分析相关类型

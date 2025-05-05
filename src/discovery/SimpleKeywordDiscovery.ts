@@ -129,13 +129,10 @@ export class SimpleKeywordDiscovery {
   /**
    * 从搜索引擎响应中提取字符串格式的建议
    */
-  private extractSuggestionsAsStrings(suggestionsResponse: AutocompleteSuggestion): string[] {
-    if (suggestionsResponse && suggestionsResponse.suggestions) {
-      return suggestionsResponse.suggestions;
+  private extractSuggestionsAsStrings(suggestionsResponse: AutocompleteSuggestion[]): string[] {
+    if (Array.isArray(suggestionsResponse)) {
+      return suggestionsResponse.map(s => s.query);
     }
-    
-    // 如果无法解析，返回空数组
-    console.warn('[SimpleKeywordDiscovery] 无法从响应中提取建议，返回空数组');
     return [];
   }
 } 

@@ -139,7 +139,7 @@ async function runSearchEngineDiagnostics(keyword: string = 'test', engineType: 
     const result = await engine.getSuggestions(keyword);
     
     log.success(`查询成功! 返回${result.suggestions.length}个结果:`);
-    result.suggestions.forEach((suggestion, index) => {
+    result.suggestions.forEach((suggestion: string, index: number) => {
       console.log(`  ${index + 1}. ${suggestion}`);
     });
     
@@ -231,4 +231,4 @@ if (require.main === module) {
     handleError(error);
     process.exit(1);
   });
-} 
+}

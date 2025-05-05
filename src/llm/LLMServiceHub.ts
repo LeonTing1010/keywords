@@ -498,10 +498,59 @@ export class LLMServiceHub {
   async simulateUserJourney(initialQuery: string, options: AnalysisOptions = {}): Promise<any> {
     return this.analyze('user_journey_simulation', {
       initialQuery,
-      task: 'Simulate a complete user search journey starting with this query'
+      task: 'Simulate a complete user search journey starting with this query',
+      format_requirements: {
+        expected_structure: {
+          initialQuery: "string - the initial search query",
+          steps: [
+            {
+              query: "string - the search query",
+              intentType: "string - categorized intent like informational, commercial, navigational, etc.",
+              expectedResults: ["array of expected search results"],
+              userAction: "string - what the user does with the results",
+              reasoning: "string - why the user moved to this query"
+            }
+          ],
+          mainIntent: "string - the primary intent across the journey"
+        },
+        example: {
+          "initialQuery": "智能手机",
+          "steps": [
+            {
+              "query": "智能手机",
+              "intentType": "informational",
+              "expectedResults": ["智能手机基本信息", "各品牌智能手机介绍"],
+              "userAction": "浏览搜索结果",
+              "reasoning": "初始搜索，了解基本信息"
+            },
+            {
+              "query": "智能手机推荐2023",
+              "intentType": "commercial",
+              "expectedResults": ["2023年热门智能手机排行", "各价位手机推荐"],
+              "userAction": "查看产品排行榜",
+              "reasoning": "想了解最新的手机推荐"
+            },
+            {
+              "query": "iPhone和华为手机对比",
+              "intentType": "comparison",
+              "expectedResults": ["iPhone与华为手机性能对比", "价格对比"],
+              "userAction": "阅读对比文章",
+              "reasoning": "缩小选择范围，比较两个主要品牌"
+            }
+          ],
+          "mainIntent": "purchase_decision"
+        },
+        instructions: [
+          "Always include at least 3-5 steps in the journey",
+          "Make sure to properly reflect how users refine their searches",
+          "Include different intent types as the user's needs evolve",
+          "Ensure each step logically follows from the previous one",
+          "All fields must be included and properly formatted"
+        ]
+      }
     }, {
       ...options,
-      systemPrompt: 'You are a user behavior expert who understands how people navigate search engines to find information.',
+      systemPrompt: 'You are a user behavior expert who understands how people navigate search engines to find information. You MUST return a journey with all the specified fields and follow the exact format provided in the example.',
       format: 'json'
     });
   }

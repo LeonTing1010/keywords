@@ -52,6 +52,8 @@ KeywordIntent - 高级用户意图挖掘与搜索行为分析系统 v3.0.0
 
 功能模块选项:
   --no-journey-sim           禁用用户旅程模拟（默认开启）
+  --no-autocomplete          禁用自动补全增强（默认开启）
+  --autocomplete-engine <引擎> 指定自动补全使用的搜索引擎（默认与主搜索引擎相同）
   
 高级选项:
   --model <模型名称>         指定LLM模型(默认: gpt-4)
@@ -59,9 +61,10 @@ KeywordIntent - 高级用户意图挖掘与搜索行为分析系统 v3.0.0
   --help, -h                 显示帮助信息
 
 示例:
-  npx ts-node keywordIntent.ts "iphone"                   # 使用默认配置进行分析（包含用户旅程模拟）
+  npx ts-node keywordIntent.ts "iphone"                   # 使用默认配置进行分析
   npx ts-node keywordIntent.ts "最佳笔记本" --proxy http://127.0.0.1:7890
-  npx ts-node keywordIntent.ts "人工智能" --no-journey-sim  # 禁用用户旅程模拟
+  npx ts-node keywordIntent.ts "人工智能" --no-autocomplete # 禁用自动补全增强
+  npx ts-node keywordIntent.ts "智能手机" --no-journey-sim # 禁用用户旅程模拟
   `);
 }
 
@@ -75,6 +78,8 @@ function parseArguments(args: string[]): {
   outputFilename?: string;
   llmModel: string;
   enableJourneySim: boolean;
+  enableAutocomplete: boolean;
+  autocompleteEngine?: string;
   outputFormat: string;
 } {
   let keyword = '';
@@ -83,6 +88,8 @@ function parseArguments(args: string[]): {
   let outputFilename: string | undefined = undefined;
   let llmModel = config.llm.defaultModel;
   let enableJourneySim = true; // 默认开启用户旅程模拟
+  let enableAutocomplete = true; // 默认开启自动补全功能
+  let autocompleteEngine: string | undefined = undefined;
   let outputFormat = 'json';
   
   // 提取命令行参数
@@ -108,6 +115,16 @@ function parseArguments(args: string[]): {
       llmModel = args[++i];
     } else if (arg === '--no-journey-sim') {
       enableJourneySim = false;
+    } else if (arg === '--no-autocomplete') {
+      enableAutocomplete = false;
+    } else if (arg === '--autocomplete-engine') {
+      autocompleteEngine = args[++i];
+      if (!autocompleteEngine || !['google', 'baidu', 'bing'].includes(autocompleteEngine)) {
+        throw new AppError(
+          `不支持的自动补全搜索引擎 "${autocompleteEngine}"，可选值: google, baidu, bing`, 
+          ErrorType.VALIDATION
+        );
+      }
     } else if (arg === '--format') {
       const format = args[++i].toLowerCase();
       if (['json', 'markdown', 'csv'].includes(format)) {
@@ -134,9 +151,19 @@ function parseArguments(args: string[]): {
   
   // 记录关键配置信息
   console.info(`[CLI] 关键词: "${keyword}", 搜索引擎: ${engineType}, 模型: ${llmModel}`);
-  console.info(`[CLI] 启用的功能: ${[
-    enableJourneySim ? '旅程模拟(含动态意图分析)' : ''
-  ].filter(Boolean).join(', ')}`);
+  
+  // 构建启用的功能列表
+  const enabledFeatures = [];
+  if (enableJourneySim) {
+    enabledFeatures.push('旅程模拟(含动态意图分析)');
+  }
+  if (enableAutocomplete) {
+    enabledFeatures.push(`自动补全增强${autocompleteEngine ? ` (引擎: ${autocompleteEngine})` : ''}`);
+  }
+  
+  if (enabledFeatures.length > 0) {
+    console.info(`[CLI] 启用的功能: ${enabledFeatures.join(', ')}`);
+  }
   
   if (proxyServer) {
     console.info(`[CLI] 使用代理: ${proxyServer}`);
@@ -149,6 +176,8 @@ function parseArguments(args: string[]): {
     outputFilename,
     llmModel,
     enableJourneySim,
+    enableAutocomplete,
+    autocompleteEngine,
     outputFormat
   };
 }
@@ -202,6 +231,8 @@ export async function main() {
       analysisDepth: 5, // 使用固定的默认分析深度
       outputFormat: options.outputFormat,
       enableJourneySim: options.enableJourneySim,
+      enableAutocomplete: options.enableAutocomplete,
+      autocompleteEngine: options.autocompleteEngine,
       verbose: false
     });
     
@@ -233,4 +264,4 @@ export async function main() {
     handleError(error);
     process.exit(1);
   }
-} 
+}

@@ -6,7 +6,22 @@ import axios from 'axios';
 import { LLMServiceOptions } from '../types';
 import { config } from '../config';
 import { ErrorType, AppError } from '../core/errorHandler';
-import { coreValueDescription } from '../config/promptLibrary';
+
+/**
+ * KeywordIntent核心价值描述
+ */
+const coreValueDescription = `
+KeywordIntent identifies valuable long-tail keywords and user intent by:
+1. Uncovering low-competition terms with high cumulative traffic
+2. Analyzing user intent and behavior patterns
+3. Identifying commercial keywords with conversion potential
+4. Discovering keyword gaps competitors overlook
+
+When analyzing, consider:
+- Search intent (informational vs. commercial)
+- Long-tail value (specificity, niche relevance)
+- Domain coverage (topic distribution across industries)
+`;
 
 /**
  * LLM响应接口
@@ -50,7 +65,6 @@ export class LLMService {
   private timeout: number;
   private maxRetries: number;
   private baseURL: string;
-  private coreValueDescription: string = coreValueDescription;
   // 会话上下文映射
   private sessionContexts: Map<string, LLMMessage[]> = new Map();
   // 会话元数据 - 存储每个会话的额外信息
@@ -174,7 +188,7 @@ export class LLMService {
     
     // 只有当系统提示不包含核心价值信息时才添加 - 避免重复
     if (!systemPrompt.includes('KeywordIntent') && !systemPrompt.includes('long-tail keyword')) {
-      enhancedSystemPrompt = `${systemPrompt}\n\n${this.coreValueDescription}`;
+      enhancedSystemPrompt = `${systemPrompt}\n\n${coreValueDescription}`;
     }
     
     // 根据语言添加适当的说明

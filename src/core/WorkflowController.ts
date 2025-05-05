@@ -10,6 +10,9 @@ import { SearchEngine } from '../providers/SearchEngine';
 import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { UserJourneySim } from '../journey/UserJourneySim';
 import { SimpleKeywordDiscovery } from '../discovery/SimpleKeywordDiscovery';
+import { AutocompleteService } from '../journey/AutocompleteService';
+import { AutocompleteParameters, DEFAULT_AUTOCOMPLETE_PARAMETERS } from '../journey/AutocompleteParameters';
+import { AutocompleteEvaluator } from '../journey/AutocompleteEvaluator';
 
 // 工作流配置接口
 export interface WorkflowConfig {
@@ -20,13 +23,22 @@ export interface WorkflowConfig {
   analysisDepth: number;
   outputFormat: string;
   enableJourneySim: boolean;
+  enableAutocomplete?: boolean; // 默认为true
+  autocompleteEngine?: string; // 自动补全搜索引擎(默认与searchEngine相同)
   verbose: boolean;
 }
 
 // 工作流结果接口
 export interface WorkflowResult {
   keyword: string;
-  iterations: any[];
+  iterations: {
+    iterationNumber: number;
+    query: string;
+    queryType: string;
+    discoveries: string[];
+    newDiscoveriesCount: number;
+    satisfactionScore: number;
+  }[];
   discoveredKeywords: string[];
   journeyAnalysis?: any; // 包含动态意图分析
   recommendations?: any;
@@ -54,6 +66,7 @@ export class WorkflowController {
   private llmService: LLMServiceHub;
   private journeySim: UserJourneySim | null = null;
   private discoveryEngine: SimpleKeywordDiscovery; // 使用简化版挖掘器
+  private autocompleteService: AutocompleteService | null = null; // 自动补全服务
   
   private maxIterations: number;
   private satisfactionThreshold: number;
@@ -72,6 +85,8 @@ export class WorkflowController {
    *   - analysisDepth: 分析深度，影响各分析模块的处理深度
    *   - outputFormat: 输出格式(json, markdown, csv)
    *   - enableJourneySim: 是否启用用户旅程模拟
+   *   - enableAutocomplete: 是否启用自动补全功能
+   *   - autocompleteEngine: 自动补全使用的搜索引擎
    *   - verbose: 是否输出详细日志
    */
   constructor(config: WorkflowConfig) {
@@ -89,21 +104,50 @@ export class WorkflowController {
       verbose: this.verbose
     });
     
+    // 根据配置初始化自动补全服务
+    if (config.enableAutocomplete !== false) {
+      const engineType = config.autocompleteEngine || this.searchEngine.getEngineType();
+      this.autocompleteService = new AutocompleteService({
+        defaultEngine: this.searchEngine,
+        verbose: this.verbose
+      });
+      
+      if (this.verbose) {
+        console.info(`[WorkflowController] 初始化自动补全服务，使用引擎: ${engineType}`);
+      }
+    }
+    
     // 根据配置初始化各组件
     if (config.enableJourneySim) {
-      this.journeySim = new UserJourneySim({
+      const journeySimConfig: any = {
         llmService: this.llmService,
         searchEngine: this.searchEngine,
         verbose: this.verbose
-      });
+      };
+      
+      // 如果启用了自动补全，将自动补全服务添加到配置中
+      if (this.autocompleteService) {
+        journeySimConfig.autocompleteService = this.autocompleteService;
+        journeySimConfig.autocompleteParams = DEFAULT_AUTOCOMPLETE_PARAMETERS;
+      }
+      
+      this.journeySim = new UserJourneySim(journeySimConfig);
     }
     
     if (this.verbose) {
-      console.info(`[WorkflowController] 初始化完成，启用的组件: ${[
-        config.enableJourneySim ? 'JourneySim' : ''
-      ].filter(Boolean).join(', ')}`);
+      const enabledComponents = [];
+      if (config.enableJourneySim) {
+        enabledComponents.push('JourneySim');
+      }
+      if (config.enableAutocomplete !== false) {
+        enabledComponents.push('Autocomplete');
+      }
+      
+      console.info(`[WorkflowController] 初始化完成，启用的组件: ${enabledComponents.join(', ') || '无'}`);
     }
   }
+  
+ 
   
   /**
    * 执行完整的分析工作流
@@ -200,4 +244,4 @@ export class WorkflowController {
     
     return recommendations;
   }
-} 
+}

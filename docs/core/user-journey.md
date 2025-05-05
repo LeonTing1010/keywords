@@ -133,9 +133,168 @@ const queryPath = journeySim.getQueryEvolutionPath(journey);
 const intentPath = journeySim.getIntentEvolutionPath(journey);
 ```
 
+## 旅程评估系统
+
+除了模拟用户搜索旅程外，系统还提供了评估模拟旅程质量的功能。评估系统可以衡量模拟旅程与真实用户行为的匹配度，帮助验证模拟结果的有效性和改进模拟策略。
+
+### 评估维度
+
+评估系统关注三个核心维度:
+
+1. **模式相似度(Pattern Similarity)**: 衡量模拟旅程中的查询修改模式是否与真实行为一致
+2. **意图转换准确性(Intent Transition Accuracy)**: 验证模拟中的意图变化点是否准确反映用户决策
+3. **查询相关性(Query Relevance)**: 衡量模拟查询与真实查询在主题和关键词上的一致性
+
+### 使用方式
+
+可以通过以下方式使用评估系统:
+
+```typescript
+// 初始化带评估器的旅程模拟器
+const journeySim = new UserJourneySim({
+  llmService,
+  searchEngine,
+  evaluator: new JourneyEvaluator({ verbose: true }),
+  verbose: true
+});
+
+// 定义真实旅程数据
+const realJourneyData = {
+  queries: [
+    "智能手机",
+    "智能手机推荐2023",
+    "华为vs苹果手机对比"
+  ],
+  refinementPatterns: ['addingSpecificity', 'addingCommercialIntent'],
+  intentTransitions: [
+    {
+      fromQuery: "智能手机",
+      toQuery: "智能手机推荐2023",
+      fromIntent: "information_seeking",
+      toIntent: "comparison_seeking"
+    }
+  ]
+};
+
+// 模拟并同时评估旅程
+const result = await journeySim.simulateAndEvaluateJourney("智能手机", realJourneyData);
+
+console.log(`旅程评估得分: ${result.metrics.overallScore}`);
+console.log(`模式相似度: ${result.metrics.patternSimilarity}`);
+console.log(`意图转换准确性: ${result.metrics.intentTransitionAccuracy}`);
+console.log(`查询相关性: ${result.metrics.queryRelevance}`);
+
+// 批量评估多个旅程
+const batchResults = await journeySim.batchSimulateAndEvaluate(
+  ["智能手机", "笔记本电脑", "健身器材"],
+  [realJourneyData] // 可以为每个查询提供对应的真实数据
+);
+
+console.log(`平均评估得分: ${batchResults.averageMetrics.overallScore}`);
+```
+
+### 评估结果解读
+
+评估指标的解读方式:
+
+- **0.8-1.0**: 极高匹配度，模拟与真实行为高度一致
+- **0.6-0.8**: 良好匹配度，主要模式和意图转换点一致
+- **0.4-0.6**: 中等匹配度，部分模式和转换点一致
+- **0.0-0.4**: 低匹配度，模拟与真实行为差异较大
+
+## 自动补全增强
+
+用户旅程模拟支持通过真实搜索引擎的自动补全建议来增强模拟路径，提高其真实性。这项功能基于一个关键观察：真实用户的搜索行为往往受到搜索引擎自动补全建议的引导。
+
+### 工作原理
+
+在旅程模拟的每一步，系统会:
+
+1. 获取当前查询的实际自动补全建议
+2. 评估这些建议与当前用户意图的相关性和匹配度
+3. 根据配置的采纳参数，决定是否用建议替换LLM预测的下一步查询
+4. 记录自动补全建议对旅程的影响程度
+
+### 自动补全参数
+
+可以通过以下参数来配置自动补全采纳行为:
+
+```typescript
+// 自动补全采纳参数示例
+const autocompleteParams = {
+  // 采纳自动补全建议的总体概率
+  overallAdoptionRate: 0.65,          // 65%的概率会采纳建议
+  
+  // 不同位置的建议权重 (索引0是第一位建议)
+  positionWeights: [1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+  
+  // 最低相关性阈值
+  relevanceThreshold: 0.5,
+  
+  // 不同语义偏离度的权重
+  semanticDeviation: {
+    low: 0.8,    // 微调类型建议的权重
+    medium: 0.5, // 相关但方向不同的建议权重
+    high: 0.2    // 完全不同方向的建议权重
+  },
+  
+  // 意图对采纳的影响权重
+  intentInfluence: 0.7,
+  
+  // 不同查询类型的采纳倍率
+  queryTypeMultipliers: {
+    informational: 0.9,  // 信息查询
+    commercial: 1.2,     // 商业查询
+    transactional: 1.3   // 交易查询
+  }
+};
+```
+
+### 使用示例
+
+```typescript
+// 初始化自动补全服务
+const autocompleteService = new AutocompleteService({
+  defaultEngine: 'baidu',  // 可选 'baidu', 'google', 'bing'
+  verbose: true
+});
+
+// 初始化旅程模拟器，包含自动补全增强
+const journeySim = new UserJourneySim({
+  llmService,
+  autocompleteService,
+  autocompleteParams: DEFAULT_AUTOCOMPLETE_PARAMETERS, // 或自定义参数
+  verbose: true
+});
+
+// 模拟旅程
+const journey = await journeySim.simulateJourney("智能手机");
+
+// 查看自动补全影响
+console.log(`自动补全影响度: ${journey.summary.autocompleteInfluence}`);
+```
+
+### 评估自动补全采纳行为
+
+系统提供了专门的自动补全评估器，用于评估模拟旅程中的自动补全采纳行为:
+
+```typescript
+// 初始化自动补全评估器
+const autocompleteEvaluator = new AutocompleteEvaluator();
+
+// 评估自动补全采纳行为
+const evaluationResult = autocompleteEvaluator.evaluateAutocompleteAdoption(
+  journeys,  // 模拟旅程列表
+  realMetrics // 从真实数据中提取的行为指标
+);
+
+console.log(`综合相似度: ${evaluationResult.overallSimilarity}`);
+```
+
 ## 未来扩展
 
 1. **真实用户数据集成**: 与实际用户搜索数据集成，增强模拟准确性
 2. **个性化模拟**: 基于不同用户画像的搜索行为模拟
 3. **多渠道旅程**: 扩展到社交媒体、语音搜索等多渠道
-4. **竞争分析**: 添加竞争对手在不同旅程阶段的可见性分析 
+4. **竞争分析**: 添加竞争对手在不同旅程阶段的可见性分析
+5. **高级评估系统**: 使用机器学习模型自动优化模拟参数，提高匹配度 

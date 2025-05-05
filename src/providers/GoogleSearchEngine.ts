@@ -70,7 +70,13 @@ export class GoogleSearchEngine implements SearchEngine {
     this.customDomain = domain;
     console.log(`[GoogleSearchEngine] 设置自定义域名: ${domain}`);
   }
-
+  /**
+   * 获取搜索引擎类型
+   * @returns 搜索引擎类型
+   */
+  getEngineType(): string {
+    return this.constructor.name.toLowerCase();
+  }
   /**
    * 随机延迟函数，模拟人类行为
    * @param min 最小延迟(ms)
@@ -243,7 +249,7 @@ export class GoogleSearchEngine implements SearchEngine {
   async getSuggestions(
     keyword: string, 
     options?: SearchOptions
-  ): Promise<AutocompleteSuggestion> {
+  ): Promise<AutocompleteSuggestion[]> {
     // 如果没有初始化，先初始化
     if (!this.isInitialized) {
       await this.initialize(options);
@@ -328,7 +334,6 @@ export class GoogleSearchEngine implements SearchEngine {
       // 过滤空建议和应用自定义过滤器
       const filteredSuggestions = suggestions
         .filter(suggestion => suggestion.trim().length > 0)
-        // 如果有自定义过滤器，应用过滤器
         .filter(suggestion => {
           if (!options?.customFilters || options.customFilters.length === 0) {
             return true;
@@ -338,10 +343,13 @@ export class GoogleSearchEngine implements SearchEngine {
       
       console.log(`获取到 ${filteredSuggestions.length} 条自动补全建议`);
       
-      return {
-        keyword,
-        suggestions: filteredSuggestions
-      };
+      // 返回 AutocompleteSuggestion[]
+      return filteredSuggestions.map((suggestion, index) => ({
+        query: suggestion,
+        position: index,
+        source: 'google',
+        timestamp: Date.now()
+      }));
     } catch (error) {
       // 保存错误截图
       if (this.page) {

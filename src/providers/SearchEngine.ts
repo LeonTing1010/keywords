@@ -19,7 +19,7 @@ export interface SearchEngine {
    * @param keyword 关键词
    * @param options 搜索选项
    */
-  getSuggestions(keyword: string, options?: SearchOptions): Promise<AutocompleteSuggestion>;
+  getSuggestions(keyword: string, options?: SearchOptions): Promise<AutocompleteSuggestion[]>;
   
   /**
    * 初始化搜索引擎
@@ -49,4 +49,10 @@ export interface SearchEngine {
    * @param domain 自定义域名
    */
   setDomain(domain: string): void;
+
+  /**
+   * 获取搜索引擎类型
+   * @returns 搜索引擎类型
+   */
+  getEngineType(): string;
 } 
