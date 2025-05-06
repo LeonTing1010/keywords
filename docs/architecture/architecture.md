@@ -1,283 +1,207 @@
-# KeywordIntent 系统架构
+# NeedMiner 系统架构
 
-KeywordIntent 是一个用于高级用户意图挖掘与搜索行为分析的系统，采用模块化设计，通过整合搜索引擎数据与AI大模型能力，实现深度的用户意图分析。
+NeedMiner 是一个未满足需求挖掘与价值验证系统，通过融合搜索引擎数据挖掘与大语言模型的认知分析能力，专注于发现互联网上尚未被满足的高价值用户需求。
 
 ## 整体架构
 
-系统分为以下主要层次:
+系统采用模块化设计，各组件通过清晰的接口交互，架构如下：
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       KeywordIntent                         │
-└───────────────────────────┬─────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│                 WorkflowController                    │
+│  协调流程，专注于挖掘和验证未满足高价值需求              │
+└────────┬────────────────┬───────────────┬─────────────┘
+         │                │               │        
+         ▼                ▼               ▼        
+┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+│  KeywordMiner  │ │ UserJourneySim │ │ContentAnalyzer │
+│ 关键词挖掘+筛选 │ │需求缺口路径检测│ │ 高价值需求识别 │
+└────────┬───────┘ └───────┬────────┘ └────────┬───────┘
+         │                 │                    │
+         └────────────────┐▼────────────────────┘
+                          │        
+                          ▼                 
+             ┌─────────────────────────────┐
+             │        LLMServiceHub        │
+             │     优化需求价值分析能力    │
+             └──────────────┬──────────────┘
                             │
-┌───────────────────────────┼─────────────────────────────────┐
-│                     工作流控制层                           │
-│                  WorkflowController                        │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────┬───────────┬───┴───────┬────────────┬────────────┐
-│  关键词挖掘 │  意图分析  │ 领域专家  │ 用户旅程   │  价值分析  │
-│ Discovery │  Intent   │ Domain    │ Journey   │  Value     │
-└─────┬─────┴─────┬─────┴─────┬─────┴─────┬──────┴─────┬──────┘
-      │           │           │           │            │
-┌─────┴───────────┴───────────┴───────────┴────────────┴──────┐
-│                       LLM服务中心                           │
-│                     LLMServiceHub                           │
-└─────────────────────────────┬─────────────────────────────┬─┘
-                              │                             │
-┌────────────────────────────┐│┌────────────────────────────┐│
-│        搜索引擎层          ││       外部API层             ││
-│      SearchEngine          ││       ExternalAPI           ││
-└────────────────────────────┘└─────────────────────────────┘
+                            ▼
+                  ┌───────────────────┐
+                  │  MarkdownReporter │
+                  │ 聚焦需求价值展示  │
+                  └───────────────────┘
 ```
 
 ## 详细架构实现
 
-KeywordIntent v3.0.0 的架构由以下主要组件组成，每个组件都有明确的职责和接口:
+NeedMiner 的架构由以下主要组件组成，每个组件都围绕"未满足高价值需求挖掘"这一核心价值设计：
 
 ### 1. 工作流控制器 (WorkflowController)
 
 **路径**: `src/core/WorkflowController.ts`
 
 **职责**: 
-- 协调各模块的执行流程，控制整体分析过程
+- 协调各模块执行顺序和数据流转
 - 管理分析过程的状态和结果整合
-- 确保各组件正确初始化和资源释放
-- 提供统一的分析入口和结果格式
+- 实现"价值筛选器"，尽早丢弃低价值需求
+- 优先分配资源给高潜力需求分析
 
 **核心方法**:
 - `executeWorkflow(keyword: string)`: 执行完整分析流程，返回综合结果
-- `getAllDiscoveredKeywords(discoveryResult)`: 提取所有发现的关键词
-- `generateRecommendations(result)`: 生成基于所有分析的综合建议
+- `analyzeUnmetNeeds(keywords)`: 分析未满足的需求
+- `evaluateNeedValue(unmetNeeds)`: 评估未满足需求的价值
 
-**执行步骤**:
-1. 关键词挖掘 - 使用迭代发现引擎
-2. 意图分析 - 分析关键词背后的用户意图
-3. 领域分析 - 识别关键词的专业领域
-4. 用户旅程模拟 - 模拟搜索行为路径
-5. 综合分析 - 执行跨域关联和价值预测
+**优化方向**:
+- 根据关键词"需求性"预判断，分配不同分析资源
+- 优化分析顺序，让高潜力需求获得更多分析深度
+- 减少非核心分析流程的资源消耗
 
-### 2. LLM服务中心 (LLMServiceHub)
+### 2. 关键词挖掘器 (SimpleKeywordDiscovery)
 
-**路径**: `src/llm/LLMServiceHub.ts`
+**路径**: `src/discovery/SimpleKeywordDiscovery.ts`
 
 **职责**: 
-- 统一管理所有AI模型交互
-- 提供缓存机制减少API调用
-- 处理会话上下文和错误重试
-- 为各模块提供专业化分析接口
-
-**核心方法**:
-- `sendPrompt(prompt, options)`: 发送提示到LLM并获取响应
-- `analyze(analysisType, data, options)`: 执行特定类型的分析任务
-- 各种专业分析方法: `identifyDomain()`, `simulateUserJourney()`, `analyzeCrossDomain()`, `predictKeywordValue()`
-
-**设计特点**:
-- 提供缓存机制减少API调用
-- 支持会话管理，维护上下文
-- 错误处理和重试机制
-- 响应解析和格式化
-
-### 3. 迭代发现引擎 (IterativeDiscoveryEngine)
-
-**路径**: `src/discovery/IterativeDiscoveryEngine.ts`
-
-**职责**: 
-- 通过多轮智能迭代发现相关长尾关键词
-- 持续优化查询策略，最大化关键词价值和多样性
-- 处理搜索引擎交互和结果解析
+- 通过搜索引擎自动补全发现潜在需求关键词
+- 筛选掉非潜在需求的关键词
+- 优先挖掘带问题词的关键词组合
 
 **核心方法**:
 - `discover(keyword)`: 开始关键词发现流程
-- `performInitialDiscovery(keyword)`: 执行初始查询
-- `planNextIteration(keyword, iterationNumber)`: 规划下一轮迭代
-- `executeIteration(query, iterationNumber)`: 执行一轮迭代
+- `getSuggestions(keyword)`: 获取搜索引擎补全建议
+- `filterNeedKeywords(keywords)`: 筛选潜在需求关键词
 
-**执行流程**:
-1. 初始查询获取第一批关键词
-2. 使用LLM规划下一轮查询策略
-3. 执行迭代查询并评估结果
-4. 根据满意度决定是否继续迭代
-5. 整合所有发现的关键词
+**优化方向**:
+- 添加"需求关键词模式识别"，筛选出更可能代表未满足需求的关键词
+- 实现基于语义的关键词聚类，减少分析重复内容
+- 优先挖掘带问题词("怎么"、"如何"、"有没有")的关键词组合
 
-### 4. 意图分析器 (IntentAnalyzer)
-
-**路径**: `src/intent/IntentAnalyzer.ts`
-
-**职责**: 
-- 识别和分类关键词背后的用户意图
-- 分析意图分布和模式
-- 提供意图相关的内容建议
-
-**核心方法**:
-- `analyzeKeywords(keywords)`: 分析关键词集合的意图
-- `extractIntentIndicators(keywords)`: 提取意图指示词
-- `filterKeywordsByIntent(keywords, intentType)`: 按意图类型筛选关键词
-- `identifyIntentShifts(keywordJourney)`: 识别意图转换点
-
-**输出内容**:
-- 意图分类和分布
-- 高价值关键词识别
-- 内容机会建议
-- 意图模式分析
-
-### 5. 领域专家系统 (DomainExpertSystem)
-
-**路径**: `src/domain/DomainExpertSystem.ts`
-
-**职责**: 
-- 自动适配不同行业知识体系
-- 提供垂直领域专业分析
-- 解释领域术语和专业概念
-- 评估关键词技术水平
-
-**核心方法**:
-- `identifyDomain(keywords)`: 识别关键词所属领域
-- `getExpertAnalysis(keywords, domainName)`: 获取专家分析
-- `classifyKeywordsByDomain(keywords)`: 按领域分类关键词
-- `adaptToDomain(keywords, targetDomain)`: 适配到特定领域
-
-**执行流程**:
-1. 识别关键词集合所属的主要领域
-2. 生成领域知识体系资料
-3. 解析领域特定术语和概念
-4. 提供专业角度的关键词分析
-
-### 6. 用户旅程模拟器 (UserJourneySim)
+### 3. 用户旅程模拟器 (UserJourneySim)
 
 **路径**: `src/journey/UserJourneySim.ts`
 
 **职责**: 
-- 模拟用户在搜索引擎中的完整搜索路径
-- 识别查询修改模式和决策点
-- 分析意图变化和搜索行为模式
+- 模拟用户搜索路径，识别"无满意结果"的路径
+- 分析查询修改模式，找出无法满足需求的证据
+- 识别决策点和搜索意图变化
 
 **核心方法**:
 - `simulateJourney(initialQuery)`: 模拟完整搜索旅程
 - `identifyDecisionPoints(steps)`: 识别决策转换点
-- `identifyRefinementPatterns(steps)`: 识别查询精炼模式
-- `analyzeMultipleJourneys(initialQueries)`: 分析多个旅程的共同模式
+- `detectSearchFailures(steps)`: 检测搜索失败路径
 
-**输出内容**:
-- 完整搜索路径模拟
-- 决策点和转换原因
-- 查询修改模式识别
-- 意图变化分析
+**优化方向**:
+- 关注"搜索失败路径"，识别用户持续修改查询但无满意结果的模式
+- 分析用户查询改写模式，找出查询精确化但结果质量下降的情况
+- 减少通用搜索分析，专注未找到答案的路径追踪
 
-### 7. 跨领域分析器 (CrossDomainAnalyzer)
+### 4. 内容分析器 (ContentAnalyzer)
 
-**路径**: `src/analyzer/CrossDomainAnalyzer.ts`
+**路径**: `src/core/ContentAnalyzer.ts`
 
 **职责**: 
-- 发现不同领域间的关键词关联
-- 识别跨域机会和内容空白
-- 分析领域间连接强度
+- 分析搜索结果内容质量，识别未满足的高价值需求
+- 评估需求的真实性、市场价值和实现难度
+- 提供未满足需求的详细原因分析
 
 **核心方法**:
-- `analyzeRelations(keywords, domains)`: 分析领域间关系
-- `analyzeDomainRelations(keywords, domains)`: 分析特定领域关系
-- `identifyCrossDomainOpportunities(keywords, domains, relations)`: 识别跨域机会
-- `compareDomains(domainA, domainB, keywords)`: 比较两个领域的相似度
+- `analyzeKeyword(keyword)`: 分析单个关键词是否是未满足需求
+- `batchAnalyzeUnmetNeeds(keywords)`: 批量分析未满足需求
+- `evaluateContentQuality(results)`: 评估内容质量和缺口
 
-**执行流程**:
-1. 识别关键词所属的多个领域
-2. 分析领域间的关系强度
-3. 识别跨域机会点
-4. 创建领域连接图
+**优化方向**:
+- 实现"需求价值评分算法"，基于市场潜力、实现难度、竞争程度评分
+- 增强真实搜索结果抓取功能，不仅分析标题摘要，还抓取页面内容
+- 引入竞争分析维度，评估已有解决方案的完整度与差距
 
-### 8. 关键词价值预测器 (KeywordValuePredictor)
+### 5. LLM服务中心 (LLMServiceHub)
 
-**路径**: `src/analyzer/KeywordValuePredictor.ts`
+**路径**: `src/llm/LLMServiceHub.ts`
 
 **职责**: 
-- 评估关键词的商业价值和竞争程度
-- 预测转化潜力和整体价值
-- 识别低竞争高价值机会
+- 统一管理AI模型交互，提供分析能力
+- 为各模块提供专业化分析接口
+- 优化提示词，围绕"高价值未满足需求识别"这一目标
 
 **核心方法**:
-- `predictValues(keywords)`: 预测关键词价值
-- `generateValueSummary(keywordValues)`: 生成价值摘要
-- `getKeywordsByScore(result, scoreType, ascending)`: 按分数类型排序关键词
-- `getCommercialOpportunities(result)`: 获取商业机会
+- `analyze(analysisType, data, options)`: 执行特定类型的分析任务
+- `verifyUnmetNeeds(data)`: 验证未满足需求的真实性
+- `evaluateNeedValue(data)`: 评估需求价值
 
-**输出内容**:
-- 关键词价值评分
-- 商业/信息价值分析
-- 竞争程度评估
-- 低竞争高价值机会识别
+**优化方向**:
+- 实现分级分析模式，先快速筛选，再深入分析有潜力的需求
+- 减少旅程和内容分析的token消耗，提高分析效率
+- 针对需求价值判断持续优化提示词
+
+### 6. Markdown报告生成器 (MarkdownReporter)
+
+**路径**: `src/tools/markdownReporter.ts`
+
+**职责**: 
+- 生成聚焦于未满足需求的分析报告
+- 突出展示高价值需求和验证方案
+- 为每个需求提供简化解决方案和冷启动MVP方案
+
+**核心方法**:
+- `generateReport(result, outputPath)`: 生成报告并输出
+- `createBasicMarkdown(result)`: 创建基础Markdown内容
+- `generateUnmetNeedsSection(result)`: 生成未满足需求部分内容
+
+**优化方向**:
+- 设计更直观的未满足需求价值展示方式，加入商业价值预估
+- 进一步精简非核心内容，报告主体聚焦未满足需求及验证方案
+- 添加可视化部分，展示需求价值与难度的矩阵图
 
 ## 数据流
 
-![数据流](../assets/data-flow.png)
+NeedMiner的数据流向如下：
 
-1. **初始输入**:
-   - 用户提供初始关键词
-   - 命令行参数设置分析选项
+1. **输入阶段**：用户提供初始关键词和分析选项
+2. **关键词挖掘**：SimpleKeywordDiscovery从搜索引擎获取潜在需求关键词
+3. **旅程模拟**：UserJourneySim模拟用户搜索路径，识别未找到满意答案的路径
+4. **内容分析**：ContentAnalyzer评估搜索结果质量，识别未满足需求
+5. **需求验证**：通过LLM验证需求的真实性和价值
+6. **价值评估**：对未满足需求进行价值评分和排序
+7. **输出阶段**：生成聚焦于高价值未满足需求和验证方案的报告
 
-2. **关键词发现流程**:
-   - WorkflowController 启动 IterativeDiscoveryEngine
-   - 发现引擎通过搜索引擎收集关键词建议
-   - LLM 指导迭代策略和评估结果
-   - 收集的关键词传递给各分析模块
+## 核心优化方向
 
-3. **多维度分析流程**:
-   - 关键词分别传递给各分析模块:
-     - IntentAnalyzer: 分析意图类型和分布
-     - DomainExpertSystem: 识别领域和术语
-     - UserJourneySim: 模拟用户搜索路径
-     - CrossDomainAnalyzer: 分析领域关联
-     - KeywordValuePredictor: 评估价值和机会
+为更聚焦于"挖掘未满足高价值需求"这一核心价值，NeedMiner将在以下方向持续优化：
 
-4. **结果整合**:
-   - WorkflowController 收集各模块分析结果
-   - 生成综合分析报告和建议
-   - 输出结构化数据到指定格式
+### 1. 内容分析器强化
+- 开发需求价值评分算法，量化市场潜力
+- 增强对抓取内容的深度分析能力
+- 引入竞争分析维度，评估现有解决方案差距
 
-## 构建和扩展
+### 2. 工作流重构
+- 实现更高效的价值筛选流程
+- 针对高潜力需求分配更多分析资源
+- 减少非核心流程的计算开销
 
-### 模块依赖关系
+### 3. LLM提示词优化
+- 持续改进所有提示词，专注于高价值需求识别
+- 实现分级分析模式，节约token消耗
+- 强化对需求价值判断的准确性
 
-```
-LLMServiceHub ◄─── IntentAnalyzer
-     ▲              KeywordValuePredictor
-     │              CrossDomainAnalyzer
-     │              DomainExpertSystem
-     │              UserJourneySim
-     │              IterativeDiscoveryEngine
-     │
-WorkflowController
-     │
-     ▼
-SearchEngine ◄──── IterativeDiscoveryEngine
-                   UserJourneySim
-```
+### 4. 报告精简
+- 突出核心价值，将未满足需求部分置于最前
+- 减少非核心内容篇幅
+- 增强需求价值和验证方案的可视化展示
 
-### 扩展指南
+## 技术实现
 
-1. **添加新分析模块**:
-   - 创建新模块类实现相应接口
-   - 在 WorkflowController 中添加模块初始化和调用
-   - 更新结果结构以包含新模块输出
+NeedMiner 采用TypeScript实现，主要技术特点包括：
 
-2. **扩展现有分析**:
-   - 向现有模块添加新的分析方法
-   - 更新 LLMServiceHub 以支持新的分析类型
-   - 在 WorkflowController 中调用新方法
+- **强类型系统**：利用TypeScript的类型系统确保代码健壮性
+- **模块化设计**：清晰的模块边界和责任划分
+- **异步处理**：使用Promise和async/await处理网络请求
+- **LLM集成**：深度集成大语言模型分析能力
+- **可扩展接口**：支持扩展不同搜索引擎和分析模型
 
-3. **支持新搜索引擎**:
-   - 实现 SearchEngine 接口
-   - 在 CLI 和工厂方法中添加新引擎支持
+## 部署架构
 
-4. **自定义输出格式**:
-   - 实现新的格式转换器
-   - 在 WorkflowController 中支持新格式
+NeedMiner 支持多种部署模式：
 
-## 技术特点
-
-- **模块化设计**: 各组件可独立工作，也可协同运行
-- **大模型驱动**: 核心分析由大语言模型提供支持，无需复杂规则库
-- **可扩展架构**: 易于添加新的分析模块和功能
-- **多维度分析**: 从意图、领域、用户旅程等多角度分析关键词
-- **缓存优化**: 减少API调用，提高性能和稳定性
-- **类型安全**: 全面使用TypeScript类型系统，提高代码质量 
+- **本地命令行工具**：作为开发者工具在本地运行
+- **API服务**：提供RESTful API供第三方系统集成
+- **网页应用**：可部署为网页界面，供非技术用户使用 
