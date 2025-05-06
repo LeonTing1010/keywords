@@ -226,6 +226,17 @@ export class MarkdownReporter {
 - SEO建议：给出明确的页面优化和结构建议
 - 实施步骤：制定优先级和时间线
 - 结论：总结建议和预期效果
+- 未满足需求解决方案：针对每个未满足需求，提供简化方案和冷启动MVP方案
+
+## 未满足需求解决方案特别要求
+如果报告中包含"未满足需求分析"部分，请特别注意：
+1. 为每个未满足需求提供简化解决方案，重点关注低成本、快速实现的方案
+2. 详细描述冷启动MVP方案，包括：
+   - 最小可行产品的具体特性
+   - 验证价值的关键指标
+   - 实施时间估计（以天/周为单位）
+   - 所需资源估计
+3. 提供需求优先级排序建议，基于实施难度和潜在价值
 
 ## 分析数据
 \`\`\`json
@@ -268,6 +279,17 @@ I'm providing KeywordIntent-generated keyword analysis data (JSON format) and a 
 - SEO Recommendations: Give clear page optimization and structure suggestions
 - Implementation Steps: Establish priorities and timeline
 - Conclusion: Summarize recommendations and expected outcomes
+- Unmet Needs Solutions: For each unmet need, provide simplified solutions and cold-start MVP approaches
+
+## Special Requirements for Unmet Needs Solutions
+If the report includes an "Unmet Needs Analysis" section, please pay special attention to:
+1. Provide simplified solutions for each unmet need, focusing on low-cost, quick-to-implement approaches
+2. Detail cold-start MVP plans including:
+   - Specific features of the minimum viable product
+   - Key metrics to validate value
+   - Implementation time estimates (in days/weeks)
+   - Resource requirements estimate
+3. Provide prioritization recommendations based on implementation difficulty and potential value
 
 ## Analysis Data
 \`\`\`json
@@ -649,7 +671,16 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
     });
     
     content += '\n\n这些未满足需求代表了潜在的内容机会，可以针对性地创建高质量内容来填补这些空缺。\n\n';
-    content += '<!-- AI请分析这些未满足需求的共性特点，并提出可能的解决策略 -->';
+    
+    // 添加简化解决方案和MVP冷启动方案的提示
+    content += '### 简化解决方案\n\n';
+    content += '*[待AI完成: 为每个未满足需求提供简化解决方案，侧重于低成本、快速实现的方法]*\n\n';
+    
+    content += '### MVP冷启动方案\n\n';
+    content += '*[待AI完成: 详细描述每个未满足需求的冷启动MVP方案，包括最小可行产品特性、验证价值的关键指标、实施时间估计和所需资源估计]*\n\n';
+    
+    content += '### 优先级排序\n\n';
+    content += '*[待AI完成: 基于实施难度和潜在价值对未满足需求进行优先级排序，给出明确的实施建议]*\n\n';
     
     return content;
   }
