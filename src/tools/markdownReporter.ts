@@ -56,7 +56,8 @@ const TRANSLATIONS = {
     implementationSteps: '实施步骤',
     conclusion: '结论',
     generatedAt: '生成时间',
-    aiEnhanced: '由AI增强分析'
+    aiEnhanced: '由AI增强分析',
+    unmetNeeds: '未满足需求分析'
   },
   en: {
     reportTitle: 'KeywordIntent Analysis Report',
@@ -81,7 +82,8 @@ const TRANSLATIONS = {
     implementationSteps: 'Implementation Steps',
     conclusion: 'Conclusion',
     generatedAt: 'Generated at',
-    aiEnhanced: 'AI-Enhanced Analysis'
+    aiEnhanced: 'AI-Enhanced Analysis',
+    unmetNeeds: 'Unmet Needs Analysis'
   }
 };
 
@@ -355,6 +357,12 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
     markdown += `## ${this.i18n.conclusion}\n\n`;
     markdown += this.generateConclusionPlaceholder(result);
     
+    // 添加未满足需求部分
+    if (result.unmetNeeds && result.unmetNeeds.length > 0) {
+      markdown += `\n\n## ${this.i18n.unmetNeeds}\n\n`;
+      markdown += this.generateUnmetNeedsSection(result);
+    }
+    
     // 提示这部分将由AI完成
     markdown += `\n---\n\n*${this.i18n.aiEnhanced}*\n`;
     
@@ -619,6 +627,31 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
    */
   private generateConclusionPlaceholder(result: WorkflowResult): string {
     return `*[待AI完成: 总结关键词"${result.keyword}"的分析价值，强调实施建议的预期效果和未来可能的优化方向]*\n\n`;
+  }
+
+  /**
+   * 生成未满足需求部分内容
+   */
+  private generateUnmetNeedsSection(result: WorkflowResult): string {
+    if (!result.unmetNeeds || result.unmetNeeds.length === 0) {
+      return '未发现未满足需求。';
+    }
+    
+    let content = `以下是与"${result.keyword}"相关的、当前内容质量不足的需求:\n\n`;
+    
+    // 添加未满足需求表格
+    content += '| 需求关键词 | 内容质量评分 | 未满足原因 |\n';
+    content += '|------------|--------------|------------|\n';
+    
+    result.unmetNeeds.forEach(need => {
+      const qualityScore = (need.contentQuality * 100).toFixed(0) + '%';
+      content += `| **${need.keyword}** | ${qualityScore} | ${need.reason} |\n`;
+    });
+    
+    content += '\n\n这些未满足需求代表了潜在的内容机会，可以针对性地创建高质量内容来填补这些空缺。\n\n';
+    content += '<!-- AI请分析这些未满足需求的共性特点，并提出可能的解决策略 -->';
+    
+    return content;
   }
 
   /**

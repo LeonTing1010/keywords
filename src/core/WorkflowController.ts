@@ -17,6 +17,7 @@ import { logger } from './logger';
 import { MarkdownReporter } from '../tools/markdownReporter';
 import * as path from 'path';
 import * as fs from 'fs';
+import { ContentAnalyzer, UnmetNeed } from './ContentAnalyzer';
 
 // 工作流配置接口
 export interface WorkflowConfig {
@@ -49,6 +50,7 @@ export interface WorkflowResult {
   discoveredKeywords: string[];
   journeyAnalysis?: any; // 包含动态意图分析
   recommendations?: any;
+  unmetNeeds?: UnmetNeed[];
   summary: {
     keywordCounts: {
       total: number;
@@ -84,6 +86,8 @@ export class WorkflowController {
   private outputDir: string;
   private language: 'zh' | 'en';
   private config: WorkflowConfig;
+  
+  private contentAnalyzer: ContentAnalyzer;
   
   /**
    * 创建工作流控制器实例
@@ -163,6 +167,13 @@ export class WorkflowController {
       this.journeySim = new UserJourneySim(journeySimConfig);
     }
     
+    // 初始化内容分析器
+    this.contentAnalyzer = new ContentAnalyzer({
+      searchEngine: this.searchEngine,
+      llmService: this.llmService,
+      verbose: this.verbose
+    });
+    
     if (this.verbose) {
       const enabledComponents = [];
       if (config.enableJourneySim) {
@@ -231,6 +242,26 @@ export class WorkflowController {
       result.journeyAnalysis = await this.journeySim.simulateJourney(keyword);
     }
     
+    // 新增阶段：未满足需求分析
+    try {
+      logger.info('开始未满足需求分析');
+      
+      // 1. 提取候选关键词
+      const candidateKeywords = this.extractCandidateNeeds(result);
+      
+      // 2. 分析未满足需求
+      result.unmetNeeds = await this.contentAnalyzer.batchAnalyzeUnmetNeeds(candidateKeywords);
+      
+      logger.info('未满足需求分析完成', { 
+        analyzed: candidateKeywords.length, 
+        found: result.unmetNeeds.length 
+      });
+    } catch (error) {
+      logger.error('未满足需求分析失败', { error });
+      // 出错时设置空数组，确保其他功能仍能工作
+      result.unmetNeeds = [];
+    }
+    
     // 阶段3：生成内容推荐
     result.recommendations = await this.generateRecommendations(result);
     
@@ -262,8 +293,7 @@ export class WorkflowController {
         // 实例化Markdown报告生成器
         const reporter = new MarkdownReporter({
           language: this.language,
-          theme: 'light',
-          outputHtml: true
+          theme: 'light'
         });
         
         // 生成报告
@@ -316,5 +346,38 @@ export class WorkflowController {
         keyFindings: ['无法生成推荐，请检查日志']
       };
     }
+  }
+  
+  /**
+   * 从分析结果中提取候选需求关键词
+   * @param result 当前的工作流结果
+   * @returns 候选需求关键词列表
+   */
+  private extractCandidateNeeds(result: WorkflowResult): string[] {
+    const candidates = new Set<string>();
+    
+    // 添加原始关键词
+    candidates.add(result.keyword);
+    
+    // 从旅程中提取关键决策点查询词
+    if (result.journeyAnalysis && result.journeyAnalysis.decisionPoints) {
+      result.journeyAnalysis.decisionPoints.forEach((point: any) => {
+        if (point.toQuery) {
+          candidates.add(point.toQuery);
+        }
+      });
+    }
+    
+    // 从发现的关键词中选择一些
+    if (result.discoveredKeywords && result.discoveredKeywords.length > 0) {
+      // 按长度排序，选择更具体（通常更长）的关键词
+      const sortedKeywords = [...result.discoveredKeywords]
+        .sort((a, b) => b.length - a.length)
+        .slice(0, 8); // 最多添加8个
+      
+      sortedKeywords.forEach(kw => candidates.add(kw));
+    }
+    
+    return Array.from(candidates);
   }
 }
