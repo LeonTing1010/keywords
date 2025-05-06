@@ -20,6 +20,7 @@
 - 移除了可视化HTML报告（VisualReporter）相关功能和所有相关代码。
 - 移除了命令行参数 `--visual-report` 和 `--report-theme`。
 - 现在仅支持Markdown报告输出。
+- 移除了未使用的 playwright.config.ts 文件，不影响系统功能。
 
 ## [3.3.0] - 2024-05-15
 
