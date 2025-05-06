@@ -130,14 +130,4 @@ export interface FinalReport {
   summary: string;                 // 总结
   iterationInsights?: string[];    // 迭代过程洞察
   bestPatterns?: string[];         // 最佳查询模式
-}
-
-/**
- * LLM配置选项
- */
-export interface LLMServiceOptions {
-  apiKey?: string;                 // API密钥
-  model?: string;                  // 模型
-  timeout?: number;                // 超时时间
-  maxRetries?: number;             // 最大重试次数
 } 

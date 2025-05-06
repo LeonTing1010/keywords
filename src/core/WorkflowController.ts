@@ -13,6 +13,10 @@ import { SimpleKeywordDiscovery } from '../discovery/SimpleKeywordDiscovery';
 import { AutocompleteService } from '../journey/AutocompleteService';
 import { AutocompleteParameters, DEFAULT_AUTOCOMPLETE_PARAMETERS } from '../journey/AutocompleteParameters';
 import { AutocompleteEvaluator } from '../journey/AutocompleteEvaluator';
+import { logger } from './logger';
+import { MarkdownReporter } from '../tools/markdownReporter';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // 工作流配置接口
 export interface WorkflowConfig {
@@ -26,6 +30,9 @@ export interface WorkflowConfig {
   enableAutocomplete?: boolean; // 默认为true
   autocompleteEngine?: string; // 自动补全搜索引擎(默认与searchEngine相同)
   verbose: boolean;
+  outputDir?: string; // 输出目录
+  language?: 'zh' | 'en'; // 报告语言
+  generateMarkdownReport?: boolean; // 是否生成Markdown报告
 }
 
 // 工作流结果接口
@@ -50,6 +57,7 @@ export interface WorkflowResult {
   };
   generatedAt: string;
   version: string;
+  reportPath?: string; // Markdown报告路径
 }
 
 /**
@@ -73,6 +81,9 @@ export class WorkflowController {
   private analysisDepth: number;
   private outputFormat: string;
   private verbose: boolean;
+  private outputDir: string;
+  private language: 'zh' | 'en';
+  private config: WorkflowConfig;
   
   /**
    * 创建工作流控制器实例
@@ -88,6 +99,9 @@ export class WorkflowController {
    *   - enableAutocomplete: 是否启用自动补全功能
    *   - autocompleteEngine: 自动补全使用的搜索引擎
    *   - verbose: 是否输出详细日志
+   *   - outputDir: 输出目录
+   *   - language: 报告语言
+   *   - generateMarkdownReport: 是否生成Markdown报告
    */
   constructor(config: WorkflowConfig) {
     this.searchEngine = config.searchEngine;
@@ -97,6 +111,21 @@ export class WorkflowController {
     this.analysisDepth = config.analysisDepth;
     this.outputFormat = config.outputFormat;
     this.verbose = config.verbose;
+    this.outputDir = config.outputDir || path.join(process.cwd(), 'output');
+    this.language = config.language || 'zh'; // 默认使用中文
+    this.config = {...config, generateMarkdownReport: true};
+    
+    // 确保输出目录存在
+    if (!fs.existsSync(this.outputDir)) {
+      fs.mkdirSync(this.outputDir, { recursive: true });
+    }
+    
+    // 初始化日志
+    logger.info('初始化工作流控制器', {
+      engine: this.searchEngine.getEngineType(),
+      iterations: this.maxIterations,
+      journeySim: config.enableJourneySim
+    });
     
     // 初始化简单关键词挖掘器
     this.discoveryEngine = new SimpleKeywordDiscovery({
@@ -113,7 +142,7 @@ export class WorkflowController {
       });
       
       if (this.verbose) {
-        console.info(`[WorkflowController] 初始化自动补全服务，使用引擎: ${engineType}`);
+        logger.debug('初始化自动补全服务', { engine: engineType });
       }
     }
     
@@ -143,105 +172,149 @@ export class WorkflowController {
         enabledComponents.push('Autocomplete');
       }
       
-      console.info(`[WorkflowController] 初始化完成，启用的组件: ${enabledComponents.join(', ') || '无'}`);
+      logger.info('工作流控制器初始化完成', { enabledComponents });
     }
   }
   
- 
-  
   /**
-   * 执行完整的分析工作流
+   * 执行完整的分析工作流程
    * 
-   * 该方法按顺序执行以下步骤:
-   * 1. 关键词挖掘 - 使用简单挖掘器发现相关关键词
-   * 2. 用户旅程模拟 - 模拟完整搜索路径和意图变化（包含动态意图分析）
-   * 
-   * @param keyword 初始关键词
-   * @returns 完整的分析结果对象
+   * @param keyword 主关键词
+   * @returns 完整的分析结果
    */
   async executeWorkflow(keyword: string): Promise<WorkflowResult> {
-    if (this.verbose) {
-      console.info(`[WorkflowController] 开始关键词分析工作流，关键词: "${keyword}"`);
-    }
+    logger.info('开始执行工作流', { keyword });
     
+    // 记录开始时间
     const startTime = Date.now();
     
-    // 步骤1: 关键词挖掘 (使用简化版挖掘器)
-    console.info(`[WorkflowController] 步骤1/2: 执行关键词挖掘`);
-    const discoveryResult = await this.discoveryEngine.discover(keyword);
-    
-    // 提取所有发现的关键词
-    const allKeywords = discoveryResult.allKeywords;
-    
-    if (this.verbose) {
-      console.info(`[WorkflowController] 关键词挖掘完成，发现 ${allKeywords.length} 个关键词`);
-    }
-    
-    // 初始化结果对象
+    // 初始化工作流结果对象
     const result: WorkflowResult = {
       keyword,
-      iterations: discoveryResult.iterations.map(it => ({
-        iterationNumber: discoveryResult.iterations.indexOf(it),
-        query: it.query,
-        queryType: it.query === keyword ? 'initial' : 'refined',
-        discoveries: it.discoveries,
-        newDiscoveriesCount: it.discoveries.length,
-        satisfactionScore: 1.0
-      })),
-      discoveredKeywords: allKeywords,
+      iterations: [],
+      discoveredKeywords: [],
       summary: {
         keywordCounts: {
-          total: allKeywords.length,
-          byIteration: discoveryResult.iterations.map(it => it.discoveries.length)
+          total: 0,
+          byIteration: []
         }
       },
       generatedAt: new Date().toISOString(),
-      version: '3.0.0'
+      version: '3.0.0' // 使用简化版本
     };
     
-    // 步骤2: 进行用户旅程模拟 (仅对主关键词)
+    // 阶段1：执行关键词挖掘
+    logger.info('开始关键词挖掘', { keyword });
+
+    // 执行单次查询
+    const discoveryResult = await this.discoveryEngine.discover(keyword);
+
+    // 直接使用结果
+    result.discoveredKeywords = discoveryResult.allKeywords;
+    result.summary.keywordCounts.total = discoveryResult.allKeywords.length;
+
+    // 添加一个虚拟迭代以保持结果格式兼容
+    result.iterations.push({
+      iterationNumber: 0,
+      query: keyword,
+      queryType: 'initial',
+      discoveries: discoveryResult.allKeywords,
+      newDiscoveriesCount: discoveryResult.allKeywords.length,
+      satisfactionScore: 1.0
+    });
+
+    result.summary.keywordCounts.byIteration = [discoveryResult.allKeywords.length];
+    
+    // 阶段2：用户旅程模拟与意图分析
     if (this.journeySim) {
-      console.info(`[WorkflowController] 步骤2/2: 执行用户旅程模拟（包含动态意图分析）`);
+      logger.info('开始用户旅程模拟', { keyword });
       result.journeyAnalysis = await this.journeySim.simulateJourney(keyword);
-      
-      if (this.verbose) {
-        console.info(`[WorkflowController] 用户旅程模拟完成，共 ${result.journeyAnalysis.steps.length} 个步骤`);
+    }
+    
+    // 阶段3：生成内容推荐
+    result.recommendations = await this.generateRecommendations(result);
+    
+    // 处理报告输出
+    const resultFilename = `${keyword.replace(/\s+/g, '_')}_analysis.json`;
+    const resultPath = path.join(this.outputDir, resultFilename);
+    
+    // 保存JSON结果
+    fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf-8');
+    logger.info('分析结果已保存', { path: resultPath });
+    
+    // 生成Markdown报告（如果配置中启用）
+    if (this.config.generateMarkdownReport) {
+      try {
+        logger.info('开始生成Markdown报告');
+        
+        // 确保reports目录存在
+        const reportsDir = path.join(this.outputDir, 'reports');
+        if (!fs.existsSync(reportsDir)) {
+          fs.mkdirSync(reportsDir, { recursive: true });
+        }
+        // 设置报告文件名
+        const formattedDate = new Date().toISOString().replace(/[-:T]/g, '_').substring(0, 16); // 20250506_1039
+        const safeKeyword = keyword.replace(/[^\w\u4e00-\u9fa5]/g, '_').substring(0, 30); // 保留中文并截取前30字符
+        const uniqueId = Math.random().toString(36).substring(2, 6); // 随机标识符
+        const reportFileName = `AIKR_${safeKeyword}_${formattedDate}_${uniqueId}.md`;
+        const reportPath = path.join(reportsDir, reportFileName);
+        
+        // 实例化Markdown报告生成器
+        const reporter = new MarkdownReporter({
+          language: this.language,
+          theme: 'light',
+          outputHtml: true
+        });
+        
+        // 生成报告
+        const generatedReportPath = await reporter.generateReport(result, reportPath);
+        
+        // 更新结果对象，添加报告路径
+        result.reportPath = generatedReportPath;
+        
+        logger.info('Markdown报告生成成功', { path: generatedReportPath });
+      } catch (error) {
+        logger.error('Markdown报告生成失败', { error });
       }
     }
     
-    // 生成综合建议
-    if (this.llmService) {
-      result.recommendations = await this.generateRecommendations(result);
-    }
-    
-    const duration = (Date.now() - startTime) / 1000;
-    console.info(`[WorkflowController] 工作流完成，耗时: ${duration.toFixed(1)}秒`);
+    // 计算总耗时
+    const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    logger.info('工作流执行完成', { 
+      keyword,
+      keywordsFound: result.discoveredKeywords.length,
+      elapsedTime: `${elapsedTime}s`
+    });
     
     return result;
   }
-  
+
   /**
-   * 生成综合建议
-   * 
-   * 使用LLM生成基于所有分析结果的综合建议
-   * 
-   * @param result 完整的工作流结果
-   * @returns 建议对象
+   * 生成内容推荐
+   * @param result 当前工作流结果
+   * @returns 推荐对象
    */
   private async generateRecommendations(result: WorkflowResult): Promise<any> {
-    if (this.verbose) {
-      console.info(`[WorkflowController] 生成综合建议`);
+    logger.info('生成内容推荐');
+    
+    try {
+      // 使用默认推荐器 - 简化实现，仅提供基础推荐
+      const recommendations = await this.llmService.analyze('content_recommendations', {
+        keyword: result.keyword,
+        discoveredKeywords: result.discoveredKeywords.slice(0, 20),
+        journey: result.journeyAnalysis
+      }, 
+      { temperature: 0.7,
+        format: 'json'
+       });
+      
+      return recommendations;
+    } catch (error) {
+      logger.error('生成推荐失败', { error });
+      return {
+        contentIdeas: [],
+        keyFindings: ['无法生成推荐，请检查日志']
+      };
     }
-    
-    // 使用LLM生成综合建议
-    const recommendations = await this.llmService.analyze('workflow_recommendations', {
-      result,
-      task: 'Generate comprehensive recommendations based on the complete analysis'
-    }, {
-      systemPrompt: 'You are a strategic advisor who provides actionable insights based on comprehensive keyword analysis.',
-      format: 'json'
-    });
-    
-    return recommendations;
   }
 }

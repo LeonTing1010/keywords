@@ -2,6 +2,7 @@
  * KeywordIntent 错误处理模块
  * 提供统一的错误处理和日志机制
  */
+import { logger } from './logger';
 
 /**
  * 错误类型枚举
@@ -84,33 +85,38 @@ function determineErrorType(error: Error): ErrorType {
  * @param error 应用错误
  */
 function logError(error: AppError): void {
-  // 根据错误类型选择不同的日志级别和格式
+  // 创建包含错误信息的上下文对象
+  const context: Record<string, any> = {
+    errorType: error.type,
+    stack: error.stack
+  };
+  
+  if (error.originalError) {
+    context.originalError = {
+      message: error.originalError.message,
+      name: error.originalError.name,
+      stack: error.originalError.stack
+    };
+  }
+  
+  // 根据错误类型选择不同的日志消息
   switch (error.type) {
     case ErrorType.VALIDATION:
-      console.error(`验证错误: ${error.message}`);
+      logger.error(`验证错误: ${error.message}`, context);
       break;
     case ErrorType.NETWORK:
-      console.error(`网络错误: ${error.message}`);
-      if (error.originalError) {
-        console.error('原始错误:', error.originalError);
-      }
+      logger.error(`网络错误: ${error.message}`, context);
       break;
     case ErrorType.API:
-      console.error(`API错误: ${error.message}`);
-      if (error.originalError) {
-        console.error('API响应:', error.originalError);
-      }
+      logger.error(`API错误: ${error.message}`, context);
       break;
     case ErrorType.BROWSER:
-      console.error(`浏览器错误: ${error.message}`);
+      logger.error(`浏览器错误: ${error.message}`, context);
       break;
     case ErrorType.FILE_SYSTEM:
-      console.error(`文件系统错误: ${error.message}`);
+      logger.error(`文件系统错误: ${error.message}`, context);
       break;
     default:
-      console.error(`未知错误: ${error.message}`);
-      if (error.originalError) {
-        console.error('原始错误:', error.originalError);
-      }
+      logger.error(`未知错误: ${error.message}`, context);
   }
 } 

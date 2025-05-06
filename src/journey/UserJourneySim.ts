@@ -2,16 +2,18 @@
  * UserJourneySim - 用户搜索旅程模拟器
  * 模拟用户在搜索引擎中的整个搜索旅程，识别决策点和查询修改模式
  */
-import { LLMServiceHub, AnalysisOptions } from '../llm/LLMServiceHub';
+import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { SearchEngine } from '../providers/SearchEngine';
 import { JourneyEvaluator, JourneyEvaluationMetrics, RealJourneyData } from './JourneyEvaluator';
-import { AutocompleteService, AutocompleteSuggestion } from './AutocompleteService';
+import { AutocompleteService } from './AutocompleteService';
+import { AutocompleteSuggestion } from './AutocompleteTypes';
 import { 
   AutocompleteParameters, 
   DEFAULT_AUTOCOMPLETE_PARAMETERS,
   AutocompleteBehaviorMetrics
 } from './AutocompleteParameters';
 import { AutocompleteEvaluator } from './AutocompleteEvaluator';
+import { logger } from '../core/logger';
 
 
 // 旅程步骤接口
@@ -101,7 +103,7 @@ export class UserJourneySim {
     this.autocompleteEvaluator = config.autocompleteEvaluator;
     
     if (this.verbose) {
-      console.info(`[UserJourneySim] 初始化完成，最大步骤: ${this.maxSteps}`);
+      logger.info(`初始化完成，最大步骤: ${this.maxSteps}`);
     }
   }
   
@@ -110,21 +112,26 @@ export class UserJourneySim {
    */
   async simulateJourney(initialQuery: string): Promise<UserJourney> {
     if (this.verbose) {
-      console.info(`[UserJourneySim] 开始模拟搜索旅程，初始查询: "${initialQuery}"`);
+      logger.info(`开始模拟搜索旅程`, { initialQuery });
     }
     
     try {
-      console.info(`[UserJourneySim] 调用LLM服务模拟用户旅程`);
-      // 使用LLM模拟整个旅程
-      const journeyData = await this.llmService.simulateUserJourney(initialQuery, {
+      logger.info(`调用LLM服务模拟用户旅程`);
+      // 使用LLM模拟整个旅程，使用analyze方法替代旧的simulateUserJourney
+      const journeyData = await this.llmService.analyze('journey_simulation', {
+        initialQuery,
+        maxSteps: this.maxSteps,
+        task: 'Simulate a user search journey starting with the given query'
+      }, {
         temperature: 0.7,
-        format: 'json'
+        format: 'json',
+        systemPrompt: 'You are an expert user behavior analyst who simulates realistic search journeys.'
       });
       
-      console.info(`[UserJourneySim] LLM服务返回数据，开始验证数据有效性`);
+      logger.info(`LLM服务返回数据，开始验证数据有效性`);
       // 验证journeyData是否有效
       if (!journeyData || typeof journeyData !== 'object') {
-        console.warn('[UserJourneySim] LLM返回的旅程数据无效，使用默认结构');
+        logger.warn('LLM返回的旅程数据无效，使用默认结构');
         
         // 创建默认旅程
         return this.createDefaultJourney(initialQuery);
@@ -132,7 +139,7 @@ export class UserJourneySim {
       
       // 确保有steps属性
       if (!journeyData.steps || !Array.isArray(journeyData.steps) || journeyData.steps.length === 0) {
-        console.warn('[UserJourneySim] LLM返回的旅程数据缺少有效的steps数组，添加默认步骤');
+        logger.warn('LLM返回的旅程数据缺少有效的steps数组，添加默认步骤');
         
         // 添加默认步骤
         journeyData.steps = [{
@@ -144,24 +151,24 @@ export class UserJourneySim {
         }];
       }
       
-      console.info(`[UserJourneySim] 数据验证完成，开始旅程增强处理`);
+      logger.info(`数据验证完成，开始旅程增强处理`);
       // 初始化步骤并添加自动补全增强
       if (this.autocompleteService) {
-        console.info(`[UserJourneySim] 检测到自动补全服务，开始自动补全增强`);
+        logger.info(`检测到自动补全服务，开始自动补全增强`);
         return await this.enhanceWithAutocomplete(journeyData);
       }
       
       // 如果可用，使用实际搜索引擎数据增强模拟
       if (this.searchEngine) {
-        console.info(`[UserJourneySim] 检测到搜索引擎，开始真实数据增强`);
+        logger.info(`检测到搜索引擎，开始真实数据增强`);
         return await this.enhanceWithRealSearchData(journeyData);
       }
       
-      console.info(`[UserJourneySim] 开始分析决策点`);
+      logger.info(`开始分析决策点`);
       // 分析决策点
       const decisionPoints = this.identifyDecisionPoints(journeyData.steps);
       
-      console.info(`[UserJourneySim] 开始构建完整旅程`);
+      logger.info(`开始构建完整旅程`);
       // 构建完整旅程
       const journey: UserJourney = {
         initialQuery,
@@ -177,12 +184,12 @@ export class UserJourneySim {
       };
       
       if (this.verbose) {
-        console.info(`[UserJourneySim] 搜索旅程模拟完成，共 ${journey.steps.length} 步，${journey.decisionPoints.length} 个决策点`);
+        logger.info(`搜索旅程模拟完成，共 ${journey.steps.length} 步，${journey.decisionPoints.length} 个决策点`);
       }
       
       return journey;
     } catch (error) {
-      console.error(`[UserJourneySim] 模拟旅程时发生错误: ${error}`);
+      logger.error(`模拟旅程时发生错误: ${error}`);
       return this.createDefaultJourney(initialQuery);
     }
   }
@@ -223,7 +230,7 @@ export class UserJourneySim {
     }
     
     if (this.verbose) {
-      console.info(`[UserJourneySim] 使用自动补全建议增强旅程`);
+      logger.info(`使用自动补全建议增强旅程`);
     }
     
     const initialQuery = journeyData.initialQuery || journeyData.steps[0].query;
@@ -281,7 +288,7 @@ export class UserJourneySim {
         step.suggestedBy === 'autocomplete' || step.suggestedBy === 'enhanced_autocomplete'
       ).length;
       
-      console.info(`[UserJourneySim] 自动补全增强完成，共 ${journey.steps.length} 步，采纳了 ${adoptedSteps} 个自动补全建议`);
+      logger.info(`自动补全增强完成，共 ${journey.steps.length} 步，采纳了 ${adoptedSteps} 个自动补全建议`);
     }
     
     return journey;
@@ -295,11 +302,11 @@ export class UserJourneySim {
     nextStepFromLLM: JourneyStep,
     suggestions: AutocompleteSuggestion[]
   ): Promise<JourneyStep> {
-    console.info(`[UserJourneySim] 开始调整下一步，当前查询: "${currentStep.query}"`);
+    logger.info(`开始调整下一步，当前查询: "${currentStep.query}"`);
 
     // 如果没有建议，使用LLM预测的下一步
     if (!suggestions || suggestions.length === 0) {
-      console.info(`[UserJourneySim] 无自动补全建议，使用LLM预测的下一步`);
+      logger.info(`无自动补全建议，使用LLM预测的下一步`);
       return {
         ...nextStepFromLLM,
         suggestedBy: 'llm_only',
@@ -309,7 +316,7 @@ export class UserJourneySim {
     
     // 决定是否采用建议
     if (Math.random() > this.autocompleteParams.overallAdoptionRate) {
-      console.info(`[UserJourneySim] 随机决定不采用自动补全建议，使用LLM预测`);
+      logger.info(`随机决定不采用自动补全建议，使用LLM预测`);
       return {
         ...nextStepFromLLM,
         suggestedBy: 'llm_only',
@@ -317,7 +324,7 @@ export class UserJourneySim {
       };
     }
     
-    console.info(`[UserJourneySim] 开始对 ${suggestions.length} 个建议进行评分`);
+    logger.info(`开始对 ${suggestions.length} 个建议进行评分`);
 
     // 对建议进行评分
     const scoredSuggestions = await Promise.all(suggestions.map(async (suggestion, index) => {
@@ -341,11 +348,11 @@ export class UserJourneySim {
     // 选择最高得分的建议
     const bestSuggestion = scoredSuggestions[0];
     
-    console.info(`[UserJourneySim] 最佳建议: "${bestSuggestion.suggestion.query}"，得分: ${bestSuggestion.score}`);
+    logger.info(`最佳建议: "${bestSuggestion.suggestion.query}"，得分: ${bestSuggestion.score}`);
     
     // 如果最高得分低于阈值，使用LLM预测
     if (bestSuggestion.score < this.autocompleteParams.relevanceThreshold) {
-      console.info(`[UserJourneySim] 最佳建议得分低于阈值 ${this.autocompleteParams.relevanceThreshold}，使用LLM预测`);
+      logger.info(`最佳建议得分低于阈值 ${this.autocompleteParams.relevanceThreshold}，使用LLM预测`);
       return {
         ...nextStepFromLLM,
         suggestedBy: 'llm_only',
@@ -353,7 +360,7 @@ export class UserJourneySim {
       };
     }
     
-    console.info(`[UserJourneySim] 采用自动补全建议: "${bestSuggestion.suggestion.query}"`);
+    logger.info(`采用自动补全建议: "${bestSuggestion.suggestion.query}"`);
     
     // 使用自动补全建议
     return {
@@ -368,34 +375,43 @@ export class UserJourneySim {
   }
   
   /**
-   * 计算查询与建议之间的相关性
+   * 使用LLM评分建议
    */
   private async llmScoreSuggestion(query: string, suggestion: string, intentType: string): Promise<{
     relevance: number,
     semanticDeviation: 'low' | 'medium' | 'high',
     intentType: string
   }> {
-    const prompt = `
-原始查询: "${query}"
-自动补全建议: "${suggestion}"
-
-请完成以下任务：
-1. 相关性评分（0-1，1为完全相关，0为完全无关）：
-2. 语义偏离类型（low/medium/high，low为细微扩展，medium为相关但方向不同，high为完全无关）：
-3. 建议的查询意图类型（informational, commercial, transactional, navigational, comparison, research）：
-
-请以如下JSON格式输出：
-{
-  "relevance": <相关性分数>,
-  "semanticDeviation": "<low|medium|high>",
-  "intentType": "<intentType>"
-}
-    `.trim();
-
-    const llm = new LLMServiceHub();
-    const response = await llm.sendPrompt(prompt);
-    // 假设 response.text 是 LLM返回的JSON字符串
-    return llm.parseJsonResponse(response);
+    // 构建提示
+    const prompt = `Query: "${query}"\nSuggestion: "${suggestion}"\nCurrent Intent: "${intentType}"\n\nEvaluate the suggestion's relevance on a scale of 0-10, its semantic deviation (low/medium/high), and the intent type of the suggestion.`;
+    
+    // 使用新的analyze方法替代sendPrompt
+    const response = await this.llmService.analyze('suggestion_scoring', {
+      query,
+      suggestion,
+      currentIntent: intentType,
+      task: 'Evaluate the suggestion relevance, semantic deviation, and intent type'
+    }, {
+      temperature: 0.3,
+      format: 'json',
+      systemPrompt: 'You are an expert search behavior analyst evaluating search suggestions.'
+    });
+    
+    // 处理响应
+    if (response && typeof response === 'object') {
+      return {
+        relevance: response.relevance || 5,
+        semanticDeviation: response.semanticDeviation || 'medium',
+        intentType: response.intentType || intentType
+      };
+    }
+    
+    // 默认响应
+    return {
+      relevance: 5,
+      semanticDeviation: 'medium',
+      intentType: intentType
+    };
   }
   
   /**
@@ -413,14 +429,14 @@ export class UserJourneySim {
    * 使用真实搜索引擎数据增强模拟
    */
   private async enhanceWithRealSearchData(journeyData: any): Promise<UserJourney> {
-    console.info(`[UserJourneySim] 开始使用真实搜索引擎数据增强模拟`);
+    logger.info(`开始使用真实搜索引擎数据增强模拟`);
     
     // 这里可以实现与实际搜索引擎的交互
     // 获取真实的搜索结果和建议，增强模拟的真实性
     
     // 检查journeyData结构是否完整
     if (!journeyData || !journeyData.steps || !Array.isArray(journeyData.steps) || journeyData.steps.length === 0) {
-      console.warn('[UserJourneySim] 无效的旅程数据，使用默认结构');
+      logger.warn('无效的旅程数据，使用默认结构');
       
       // 创建默认步骤
       const defaultSteps: JourneyStep[] = [{
@@ -431,7 +447,7 @@ export class UserJourneySim {
         reasoning: "初始查询"
       }];
       
-      console.info(`[UserJourneySim] 创建默认旅程，初始查询: "${defaultSteps[0].query}"`);
+      logger.info(`创建默认旅程，初始查询: "${defaultSteps[0].query}"`);
       
       // 返回默认旅程
       return {
@@ -448,7 +464,7 @@ export class UserJourneySim {
       };
     }
     
-    console.info(`[UserJourneySim] 开始处理有效旅程数据，共 ${journeyData.steps.length} 步`);
+    logger.info(`开始处理有效旅程数据，共 ${journeyData.steps.length} 步`);
     
     // 正常处理有效数据
     const enhancedJourney = {
@@ -464,8 +480,8 @@ export class UserJourneySim {
       }
     };
     
-    console.info(`[UserJourneySim] 真实数据增强完成，最终查询: "${enhancedJourney.finalQuery}"`);
-    console.info(`[UserJourneySim] 旅程统计: ${enhancedJourney.summary.totalSteps} 步，${enhancedJourney.summary.intentShifts} 次意图转换`);
+    logger.info(`真实数据增强完成，最终查询: "${enhancedJourney.finalQuery}"`);
+    logger.info(`旅程统计: ${enhancedJourney.summary.totalSteps} 步，${enhancedJourney.summary.intentShifts} 次意图转换`);
     
     return enhancedJourney;
   }
@@ -476,7 +492,7 @@ export class UserJourneySim {
   private identifyDecisionPoints(steps: JourneyStep[]): DecisionPoint[] {
     // 添加步骤验证，防止undefined或空数组导致错误
     if (!steps || !Array.isArray(steps) || steps.length === 0) {
-      console.warn('[UserJourneySim] 无效的步骤数组，无法识别决策点');
+      logger.warn('无效的步骤数组，无法识别决策点');
       return [];
     }
     
@@ -516,7 +532,7 @@ export class UserJourneySim {
   private identifyRefinementPatterns(steps: JourneyStep[]): string[] {
     // 添加步骤验证，防止undefined或空数组导致错误
     if (!steps || !Array.isArray(steps) || steps.length <= 1) {
-      console.warn('[UserJourneySim] 无效的步骤数组或步骤数量不足，无法识别查询精炼模式');
+      logger.warn('无效的步骤数组或步骤数量不足，无法识别查询精炼模式');
       return [];
     }
     
@@ -576,7 +592,7 @@ export class UserJourneySim {
    */
   async analyzeMultipleJourneys(initialQueries: string[]): Promise<any> {
     if (this.verbose) {
-      console.info(`[UserJourneySim] 开始分析多个用户旅程，共 ${initialQueries.length} 个初始查询`);
+      logger.info(`开始分析多个用户旅程，共 ${initialQueries.length} 个初始查询`);
     }
     
     // 模拟多个旅程
@@ -588,7 +604,7 @@ export class UserJourneySim {
     const patterns = this.extractCommonPatterns(journeys);
     
     if (this.verbose) {
-      console.info(`[UserJourneySim] 多旅程分析完成，发现 ${Object.keys(patterns).length} 种常见模式`);
+      logger.info(`多旅程分析完成，发现 ${Object.keys(patterns).length} 种常见模式`);
     }
     
     return {

@@ -12,6 +12,7 @@ import { ErrorType, AppError } from '../core/errorHandler';
 import * as playwright from 'playwright';
 import * as path from 'path';
 import * as fs from 'fs';
+import { logger } from '../core/logger';
 
 /**
  * 百度搜索引擎实现
@@ -50,7 +51,7 @@ export class BaiduSearchEngine implements SearchEngine {
    */
   setProxy(proxyServer: string): void {
     this.proxyServer = proxyServer;
-    console.log(`[BaiduSearchEngine] 设置代理服务器: ${proxyServer}`);
+    logger.info(`设置代理服务器: ${proxyServer}`, { engine: 'baidu' });
   }
   
   /**
@@ -59,7 +60,7 @@ export class BaiduSearchEngine implements SearchEngine {
    */
   useSystemBrowser(useSystem: boolean): void {
     this.useSystem = useSystem;
-    console.log(`[BaiduSearchEngine] ${useSystem ? '使用系统浏览器' : '使用临时浏览器'}`);
+    logger.info(`${useSystem ? '使用系统浏览器' : '使用临时浏览器'}`, { engine: 'baidu' });
   }
   
   /**
@@ -68,7 +69,7 @@ export class BaiduSearchEngine implements SearchEngine {
    */
   setDomain(domain: string): void {
     this.customDomain = domain;
-    console.log(`[BaiduSearchEngine] 设置自定义域名: ${domain}`);
+    logger.info(`设置自定义域名: ${domain}`, { engine: 'baidu' });
   }
 
   /**
@@ -204,15 +205,15 @@ export class BaiduSearchEngine implements SearchEngine {
       for (const selector of consentSelectors) {
         const button = await page.$(selector);
         if (button) {
-          console.log(`找到隐私政策确认按钮，使用选择器: ${selector}`);
+          logger.debug(`找到隐私政策确认按钮，使用选择器: ${selector}`, { engine: 'baidu' });
           await button.click();
-          console.log('已点击隐私政策确认按钮');
+          logger.debug('已点击隐私政策确认按钮', { engine: 'baidu' });
           await this.randomDelay(1000, 2000); // 等待确认操作完成
           break;
         }
       }
     } catch (e) {
-      console.log('未发现隐私政策确认对话框或已处理');
+      logger.debug('未发现隐私政策确认对话框或已处理', { engine: 'baidu' });
     }
   }
 
@@ -229,10 +230,13 @@ export class BaiduSearchEngine implements SearchEngine {
       
       const screenshotPath = path.join(outputDir, `${errorPrefix}-${Date.now()}.png`);
       await page.screenshot({ path: screenshotPath });
-      console.log(`已保存错误截图到 ${screenshotPath}`);
+      logger.info(`已保存错误截图到 ${screenshotPath}`, { engine: 'baidu' });
       return screenshotPath;
     } catch (e) {
-      console.error(`保存错误截图失败: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error(`保存错误截图失败: ${e instanceof Error ? e.message : String(e)}`, { 
+        engine: 'baidu',
+        error: e
+      });
       return null;
     }
   }
@@ -267,18 +271,18 @@ export class BaiduSearchEngine implements SearchEngine {
       const url = `https://${domain}/`;
       
       // 导航到百度首页
-      console.log(`正在访问 ${url}...`);
+      logger.debug(`正在访问 ${url}...`, { engine: 'baidu', keyword });
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
       
       // 等待页面稳定
-      console.log('页面加载完成，等待稳定...');
+      logger.debug('页面加载完成，等待稳定...', { engine: 'baidu' });
       await this.randomDelay(1000, 2000);
       
       // 处理隐私政策确认对话框
       await this.handlePrivacyConsent(this.page);
       
       // 查找搜索框
-      console.log('正在查找搜索框...');
+      logger.debug('正在查找搜索框...', { engine: 'baidu' });
       let searchInput = null;
       const selectors = [
         '#kw',                // 百度主要搜索框ID
@@ -292,7 +296,7 @@ export class BaiduSearchEngine implements SearchEngine {
           const input = await this.page.$(selector);
           if (input) {
             searchInput = input;
-            console.log(`找到搜索框，使用选择器: ${selector}`);
+            logger.debug(`找到搜索框，使用选择器: ${selector}`, { engine: 'baidu' });
             break;
           }
         } catch (e) {
@@ -305,7 +309,7 @@ export class BaiduSearchEngine implements SearchEngine {
       }
       
       // 输入关键词
-      console.log(`正在输入关键词: ${keyword}`);
+      logger.debug(`正在输入关键词: ${keyword}`, { engine: 'baidu' });
       await searchInput.click();
       await this.randomDelay(300, 600);
       await searchInput.fill(''); // 清空当前内容
@@ -314,12 +318,12 @@ export class BaiduSearchEngine implements SearchEngine {
       await this.randomDelay(800, 1500); // 等待自动补全出现
       
       // 等待自动补全结果出现
-      console.log('等待自动补全结果...');
+      logger.debug('等待自动补全结果...', { engine: 'baidu' });
       const suggestionSelector = '.bdsug-store ul li, .bdsug ul li, .bdsug-list li';
       await this.page.waitForSelector(suggestionSelector, { 
         timeout: this.config.waitTime || 2000 
       }).catch(() => {
-        console.warn('未找到自动补全结果，可能没有建议或选择器变化');
+        logger.warn('未找到自动补全结果，可能没有建议或选择器变化', { engine: 'baidu', keyword });
       });
       
       await this.randomDelay(400, 800);
@@ -337,7 +341,11 @@ export class BaiduSearchEngine implements SearchEngine {
           return options.customFilters.every(filter => filter(suggestion));
         });
       
-      console.log(`获取到 ${filteredSuggestions.length} 条自动补全建议`);
+      logger.info(`获取到 ${filteredSuggestions.length} 条自动补全建议`, { 
+        engine: 'baidu', 
+        keyword,
+        count: filteredSuggestions.length
+      });
       
       // 返回 AutocompleteSuggestion[]
       return filteredSuggestions.map((suggestion, index) => ({

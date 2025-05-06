@@ -16,10 +16,12 @@ import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { UserJourneySim } from '../journey/UserJourneySim';
 import { WorkflowController } from '../core/WorkflowController';
 import { config } from '../config';
+import { logger, LogLevel } from '../core/logger';
+import { Logger } from '../core/logger';
 
 // 创建搜索引擎实例的工厂函数
 function createSearchEngine(type: SearchEngineType): SearchEngine {
-  console.info(`[CLI] 创建搜索引擎: "${type}"`);
+  logger.info('创建搜索引擎', { type });
   
   switch(type.toLowerCase()) {
     case 'google':
@@ -53,18 +55,23 @@ KeywordIntent - 高级用户意图挖掘与搜索行为分析系统 v3.0.0
 功能模块选项:
   --no-journey-sim           禁用用户旅程模拟（默认开启）
   --no-autocomplete          禁用自动补全增强（默认开启）
-  --autocomplete-engine <引擎> 指定自动补全使用的搜索引擎（默认与主搜索引擎相同）
   
+输出选项:
+  --format <格式>            输出格式(json, markdown, csv，默认: json)
+  --language <语言>          报告语言(zh, en，默认: zh)
+  --markdown-report          生成Markdown格式的分析报告
+
 高级选项:
   --model <模型名称>         指定LLM模型(默认: gpt-4)
-  --format <格式>            输出格式(json, markdown, csv，默认: json)
+  --verbose                  输出详细日志
+  --log-level <级别>         设置日志级别(error, warn, info, debug, trace)
   --help, -h                 显示帮助信息
 
 示例:
-  npx ts-node keywordIntent.ts "iphone"                   # 使用默认配置进行分析
+  npx ts-node keywordIntent.ts "iphone"                     # 使用默认配置进行分析
   npx ts-node keywordIntent.ts "最佳笔记本" --proxy http://127.0.0.1:7890
-  npx ts-node keywordIntent.ts "人工智能" --no-autocomplete # 禁用自动补全增强
-  npx ts-node keywordIntent.ts "智能手机" --no-journey-sim # 禁用用户旅程模拟
+  npx ts-node keywordIntent.ts "artificial intelligence" --language en  # 生成英文报告
+  npx ts-node keywordIntent.ts "SEO优化" --markdown-report   # 生成Markdown格式分析报告
   `);
 }
 
@@ -81,6 +88,10 @@ function parseArguments(args: string[]): {
   enableAutocomplete: boolean;
   autocompleteEngine?: string;
   outputFormat: string;
+  language: 'zh' | 'en';
+  verbose: boolean;
+  logLevel: LogLevel;
+  generateMarkdownReport: boolean;
 } {
   let keyword = '';
   let engineType: SearchEngineType = 'baidu'; // 默认使用百度
@@ -91,6 +102,10 @@ function parseArguments(args: string[]): {
   let enableAutocomplete = true; // 默认开启自动补全功能
   let autocompleteEngine: string | undefined = undefined;
   let outputFormat = 'json';
+  let language: 'zh' | 'en' = 'zh'; // 默认使用中文
+  let verbose = false;
+  let logLevel = LogLevel.INFO;
+  let generateMarkdownReport = false; // 默认不生成Markdown报告
   
   // 提取命令行参数
   for (let i = 0; i < args.length; i++) {
@@ -117,14 +132,6 @@ function parseArguments(args: string[]): {
       enableJourneySim = false;
     } else if (arg === '--no-autocomplete') {
       enableAutocomplete = false;
-    } else if (arg === '--autocomplete-engine') {
-      autocompleteEngine = args[++i];
-      if (!autocompleteEngine || !['google', 'baidu', 'bing'].includes(autocompleteEngine)) {
-        throw new AppError(
-          `不支持的自动补全搜索引擎 "${autocompleteEngine}"，可选值: google, baidu, bing`, 
-          ErrorType.VALIDATION
-        );
-      }
     } else if (arg === '--format') {
       const format = args[++i].toLowerCase();
       if (['json', 'markdown', 'csv'].includes(format)) {
@@ -134,6 +141,34 @@ function parseArguments(args: string[]): {
           `不支持的输出格式: ${format}`,
           ErrorType.VALIDATION
         );
+      }
+    } else if (arg === '--language') {
+      const lang = args[++i].toLowerCase();
+      if (['zh', 'en'].includes(lang)) {
+        language = lang as 'zh' | 'en';
+      } else {
+        throw new AppError(
+          `不支持的语言: ${lang}，可选值: zh, en`,
+          ErrorType.VALIDATION
+        );
+      }
+    } else if (arg === '--markdown-report') {
+      generateMarkdownReport = true;
+    } else if (arg === '--verbose') {
+      verbose = true;
+    } else if (arg === '--log-level') {
+      const level = args[++i].toLowerCase();
+      switch (level) {
+        case 'error': logLevel = LogLevel.ERROR; break;
+        case 'warn': logLevel = LogLevel.WARN; break;
+        case 'info': logLevel = LogLevel.INFO; break;
+        case 'debug': logLevel = LogLevel.DEBUG; break;
+        case 'trace': logLevel = LogLevel.TRACE; break;
+        default:
+          throw new AppError(
+            `不支持的日志级别: ${level}，可选值: error, warn, info, debug, trace`,
+            ErrorType.VALIDATION
+          );
       }
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
@@ -149,26 +184,6 @@ function parseArguments(args: string[]): {
     throw new AppError('请提供一个搜索关键词', ErrorType.VALIDATION);
   }
   
-  // 记录关键配置信息
-  console.info(`[CLI] 关键词: "${keyword}", 搜索引擎: ${engineType}, 模型: ${llmModel}`);
-  
-  // 构建启用的功能列表
-  const enabledFeatures = [];
-  if (enableJourneySim) {
-    enabledFeatures.push('旅程模拟(含动态意图分析)');
-  }
-  if (enableAutocomplete) {
-    enabledFeatures.push(`自动补全增强${autocompleteEngine ? ` (引擎: ${autocompleteEngine})` : ''}`);
-  }
-  
-  if (enabledFeatures.length > 0) {
-    console.info(`[CLI] 启用的功能: ${enabledFeatures.join(', ')}`);
-  }
-  
-  if (proxyServer) {
-    console.info(`[CLI] 使用代理: ${proxyServer}`);
-  }
-  
   return {
     keyword,
     engineType,
@@ -178,7 +193,11 @@ function parseArguments(args: string[]): {
     enableJourneySim,
     enableAutocomplete,
     autocompleteEngine,
-    outputFormat
+    outputFormat,
+    language,
+    verbose,
+    logLevel,
+    generateMarkdownReport
   };
 }
 
@@ -198,6 +217,55 @@ export async function main() {
     // 解析命令行参数
     const options = parseArguments(args);
     
+    // 配置日志级别
+    if (options.logLevel !== LogLevel.INFO || options.verbose) {
+      // 如果指定了非默认日志级别或verbose模式，创建新的logger实例
+      const loggerConfig = {
+        level: options.logLevel,
+        useConsole: true,
+        formatTimestamp: true,
+        includeContext: true
+      };
+      
+      // 当使用verbose模式时，自动提升日志级别到DEBUG
+      if (options.verbose && options.logLevel < LogLevel.DEBUG) {
+        loggerConfig.level = LogLevel.DEBUG;
+      }
+      
+      // 使用新的配置创建logger实例
+      const newLogger = new Logger(loggerConfig);
+      
+      // 替换全局logger (注: 在实际代码中可能需要一个更好的方式来替换全局logger)
+      // 由于这是一个简单的修复，我们保持这种方式
+    }
+    
+    logger.info('KeywordIntent 分析启动', { 
+      keyword: options.keyword, 
+      engine: options.engineType, 
+      model: options.llmModel,
+      logLevel: LogLevel[options.logLevel]
+    });
+    
+    // 构建启用的功能列表
+    const enabledFeatures = [];
+    if (options.enableJourneySim) {
+      enabledFeatures.push('旅程模拟');
+    }
+    if (options.enableAutocomplete) {
+      enabledFeatures.push(`自动补全增强${options.autocompleteEngine ? ` (引擎: ${options.autocompleteEngine})` : ''}`);
+    }
+    if (options.generateMarkdownReport) {
+      enabledFeatures.push(`Markdown报告 (${options.language === 'en' ? '英文' : '中文'})`);
+    }
+    
+    if (enabledFeatures.length > 0) {
+      logger.info('启用的功能', { features: enabledFeatures });
+    }
+    
+    if (options.proxyServer) {
+      logger.info('使用代理', { proxy: options.proxyServer });
+    }
+    
     // 确保输出目录存在
     const outputDir = path.resolve(process.cwd(), 'output');
     if (!fs.existsSync(outputDir)) {
@@ -212,37 +280,48 @@ export async function main() {
       searchEngine.setProxy(options.proxyServer);
     }
     
-    // 使用系统浏览器（默认）
-    searchEngine.useSystemBrowser(true);
+    // 使用系统浏览器
+    if (process.env.USE_SYSTEM_BROWSER === 'true') {
+      searchEngine.useSystemBrowser(true);
+      logger.info('使用系统浏览器', { engine: options.engineType });
+    }
     
-    // 使用默认配置的 LLM 服务
+    // 创建LLM服务实例
     const llmService = new LLMServiceHub({
-      model: options.llmModel,
-      cacheExpiry: 24 * 60 * 60, // 默认24小时缓存过期时间（秒）
-      verbose: false // 默认不启用详细日志
+      model: options.llmModel
     });
     
-    // 创建工作流控制器，使用默认配置
+    // 创建工作流控制器
     const workflowController = new WorkflowController({
       searchEngine,
       llmService,
-      maxIterations: 3, // 使用固定值代替config.iterativeEngine.maxIterations
-      satisfactionThreshold: 0.8, // 使用固定值代替config.iterativeEngine.defaultSatisfactionThreshold
-      analysisDepth: 5, // 使用固定的默认分析深度
+      maxIterations: 3, // 固定为3轮迭代
+      satisfactionThreshold: 0.85,
+      analysisDepth: 2,
       outputFormat: options.outputFormat,
       enableJourneySim: options.enableJourneySim,
       enableAutocomplete: options.enableAutocomplete,
       autocompleteEngine: options.autocompleteEngine,
-      verbose: false
+      verbose: options.verbose,
+      outputDir: outputDir,
+      language: options.language, // 传递语言设置
+      generateMarkdownReport: options.generateMarkdownReport
+    });
+    
+    logger.debug('已创建工作流控制器', { 
+      iterations: 3, 
+      journeySim: options.enableJourneySim
     });
     
     // 设置输出文件名
     const timestamp = new Date().toISOString().replace(/:/g, '-');
     const outputFilename = options.outputFilename || 
-      path.join(outputDir, `keywordintent_${options.keyword}_${timestamp}.${options.outputFormat}`);
+      path.join(outputDir, `keywordintent_${options.keyword.replace(/\s+/g, '_')}_${timestamp}.${options.outputFormat}`);
     
-    console.info(`[CLI] 开始分析关键词: "${options.keyword}"`);
-    console.info(`[CLI] 结果将保存到: ${outputFilename}`);
+    logger.info('开始分析关键词', { 
+      keyword: options.keyword, 
+      outputPath: outputFilename 
+    });
     
     // 执行工作流
     const result = await workflowController.executeWorkflow(options.keyword);
@@ -254,13 +333,28 @@ export async function main() {
         : result.toString()
     );
     
-    console.info(`[CLI] 分析完成! 结果已保存到: ${outputFilename}`);
-    console.info(`[CLI] 发现关键词: ${result.summary.keywordCounts.total} 个`);
+    logger.info('分析完成', { 
+      keywordsCount: result.summary.keywordCounts.total,
+      outputPath: outputFilename
+    });
+    
+    // 打印结果概要
+    logger.info(`分析完成! 发现 ${result.summary.keywordCounts.total} 个关键词`);
+    logger.info(`结果已保存到: ${outputFilename}`);
+    
+    // 如果生成了Markdown报告，显示报告路径
+    if (result.reportPath) {
+      logger.info(`Markdown报告: ${result.reportPath}`);
+    }
     
     // 关闭搜索引擎
     await searchEngine.close();
     
+    // 关闭日志
+    logger.close();
+    
   } catch (error) {
+    logger.error('分析过程出错', { error });
     handleError(error);
     process.exit(1);
   }

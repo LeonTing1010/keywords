@@ -1,735 +1,459 @@
 /**
- * LLMServiceHub - 统一LLM服务中心
- * 集中管理所有AI模型交互，提供缓存和优化
+ * LLMServiceHub - 大语言模型服务中心
+ * 统一管理与大语言模型的交互，提供标准化的接口
  */
-import axios from 'axios';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as crypto from 'crypto';
-import { config } from '../config';
+import { logger } from '../core/logger';
+
+// LLM消息接口
+export interface LLMMessage {
+  role: 'system' | 'user' | 'assistant' | 'function';
+  content: string;
+  name?: string;
+}
+
+// LLM选项接口
+export interface LLMOptions {
+  temperature?: number; // 温度参数 0-1
+  topP?: number; // 取样温度
+  maxTokens?: number; // 最大生成token数
+  presencePenalty?: number; // 重复惩罚系数
+  frequencyPenalty?: number; // 频率惩罚系数
+  stop?: string[]; // 停止词
+  systemPrompt?: string; // 系统提示词
+  format?: 'json' | 'text'; // 期望的输出格式
+  language?: 'zh' | 'en'; // 期望的输出语言
+}
 
 // LLM提供者接口
 export interface LLMProvider {
-  name: string;
-  sendPrompt(prompt: string, options?: any): Promise<string>;
-}
-
-// 分析选项接口
-export interface AnalysisOptions {
-  systemPrompt?: string;
-  temperature?: number;
-  format?: 'text' | 'json';
-  language?: string;
-  sessionId?: string;
-}
-
-// 会话元数据接口
-interface SessionMetadata {
-  createdAt: Date;
-  lastUsedAt: Date;
-  purpose: string;
-  messageCount: number;
-  originalKeyword?: string;
-}
-
-// LLM消息接口
-interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-// LLM响应接口
-interface LLMResponse {
-  id: string;
-  choices: {
-    message: {
-      role: string;
-      content: string;
-    };
-    index: number;
-    finish_reason: string;
-  }[];
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
-// 缓存项接口
-interface CacheItem {
-  response: string;
-  timestamp: number;
-  model: string;
+  call(messages: LLMMessage[], options?: LLMOptions): Promise<string>;
+  getName(): string;
 }
 
 /**
- * LLMServiceHub是一个集中的AI模型交互服务
- * 管理所有与LLM的通信，提供缓存和会话管理
+ * LLM服务中心，提供统一的大语言模型访问接口
  */
 export class LLMServiceHub {
-  private models: Record<string, LLMProvider> = {};
   private defaultModel: string;
   private apiKey: string;
-  private baseURL = 'https://api.openai.com/v1';
-  private timeout = 120000; // 默认超时时间2分钟
-  private maxRetries = 3;
-  private cacheDir: string;
-  private cacheExpiry: number; // 缓存过期时间（秒）
-  private sessionContexts: Map<string, LLMMessage[]> = new Map();
-  private sessionMetadata: Map<string, SessionMetadata> = new Map();
-  private maxContextLength = 15; // 会话历史的最大消息数
+  private baseUrl: string;
   private verbose: boolean;
   
-  private initializeBaseUrl() {
-    // 从环境变量中获取基础URL
-    const envBaseUrl = process.env.LLM_BASE_URL;
-    if (envBaseUrl) {
-      this.baseURL = envBaseUrl;
-      return;
-    }
-    
-    // 根据模型自动设置基础URL
-    if (this.defaultModel.includes('gpt')) {
-      this.baseURL = 'https://api.openai.com/v1';
-    } else if (this.defaultModel.includes('claude')) {
-      this.baseURL = 'https://api.anthropic.com/v1';
-    } else if (this.defaultModel.includes('qwen')) {
-      this.baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    }
-    
-    if (this.verbose) {
-      console.info(`[LLMServiceHub] 使用模型 ${this.defaultModel}，基础URL: ${this.baseURL}`);
-    }
-  }
-  
+  /**
+   * 创建LLM服务中心实例
+   * @param options 配置选项
+   */
   constructor(options: {
     model?: string;
     apiKey?: string;
-    cacheExpiry?: number; // 秒
     verbose?: boolean;
   } = {}) {
-    this.defaultModel = options.model || config.llm.defaultModel;
+    this.defaultModel = options.model || process.env.LLM_MODEL || 'gpt-4';
     this.apiKey = options.apiKey || process.env.OPENAI_API_KEY || '';
-    this.cacheExpiry = options.cacheExpiry || 24 * 60 * 60; // 默认24小时
+    
+    // 根据模型类型自动选择适当的基础URL
+    if (process.env.LLM_BASE_URL) {
+      this.baseUrl = process.env.LLM_BASE_URL;
+    } else if (this.defaultModel.startsWith('anthropic/') || this.defaultModel.startsWith('claude')) {
+      this.baseUrl = 'https://api.anthropic.com/v1';
+    } else if (this.defaultModel.startsWith('qwen')) {
+      this.baseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    } else {
+      // 默认使用OpenAI
+      this.baseUrl = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+    }
+    
     this.verbose = options.verbose || false;
     
-    // 初始化基础URL
-    this.initializeBaseUrl();
-    
-    // 确保缓存目录存在
-    this.cacheDir = path.join(process.cwd(), 'output', 'cache');
-    if (!fs.existsSync(this.cacheDir)) {
-      fs.mkdirSync(this.cacheDir, { recursive: true });
-    }
-    
     if (!this.apiKey) {
-      console.warn('[LLMServiceHub] 警告: 未设置API密钥，请设置OPENAI_API_KEY环境变量');
+      logger.warn('未设置API密钥，请设置OPENAI_API_KEY环境变量');
     }
     
-    if (this.verbose) {
-      console.info(`[LLMServiceHub] 初始化完成，默认模型: ${this.defaultModel}, 缓存过期: ${this.cacheExpiry}秒`);
-    }
+    logger.info('LLM服务中心初始化完成', { model: this.defaultModel, baseUrl: this.baseUrl });
   }
   
   /**
-   * 发送提示到LLM
+   * 分析内容
+   * @param type 分析类型
+   * @param data 要分析的数据
+   * @param options 分析选项
+   * @returns 分析结果
    */
-  async sendPrompt(
-    prompt: string,
-    options: {
-      model?: string;
-      systemPrompt?: string;
-      temperature?: number;
-      requireJson?: boolean;
-      sessionId?: string;
-      language?: string;
-    } = {}
-  ): Promise<string> {
-    const model = options.model || this.defaultModel;
-    const systemPrompt = options.systemPrompt || 'You are a helpful assistant.';
-    const temperature = options.temperature || 0.7;
-    const requireJson = options.requireJson || false;
-    const sessionId = options.sessionId;
-    const language = options.language || 'en';
-    
-    // 增强系统提示
-    const enhancedSystemPrompt = this.enhanceSystemPrompt(systemPrompt, language);
-    
-    // 准备消息
-    let messages: LLMMessage[] = [];
-    
-    // 如果提供会话ID，获取或创建会话历史
-    if (sessionId) {
-      // 检查会话是否已存在
-      if (!this.sessionContexts.has(sessionId)) {
-        // 新会话，初始化系统消息
-        this.sessionContexts.set(sessionId, [
-          { role: 'system', content: enhancedSystemPrompt }
-        ]);
-        
-        // 初始化会话元数据
-        this.sessionMetadata.set(sessionId, {
-          createdAt: new Date(),
-          lastUsedAt: new Date(),
-          purpose: 'general',
-          messageCount: 1
-        });
-        
-        if (this.verbose) {
-          console.info(`[LLMServiceHub] 创建新会话: ${sessionId}`);
-        }
+  async analyze(type: string, data: any, options: LLMOptions = {}): Promise<any> {
+    try {
+      // 根据分析类型决定是否需要JSON输出
+      const requireJson = options.format === 'json' || 
+                         (options.format === undefined && (
+                           type.includes('evaluation') ||
+                           type.includes('categorize') ||
+                           type.includes('plan') ||
+                           type.includes('recommendations')
+                         ));
+      
+      // 根据分析类型调整温度
+      const defaultTemp = type.includes('creative') ? 0.8 : 
+                         type.includes('generation') ? 0.7 :
+                         type.includes('evaluation') ? 0.3 : 0.5;
+      
+      const temperature = options.temperature !== undefined ? options.temperature : defaultTemp;
+      
+      // 构建消息
+      const messages: LLMMessage[] = [];
+      
+      // 添加系统消息
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
       } else {
-        // 已存在的会话，可能需要更新系统消息
-        const sessionMessages = this.sessionContexts.get(sessionId) || [];
-        
-        // 如果系统提示有变化，更新第一条系统消息
-        if (sessionMessages.length > 0 && sessionMessages[0].role === 'system' && 
-            sessionMessages[0].content !== enhancedSystemPrompt) {
-          sessionMessages[0].content = enhancedSystemPrompt;
-          this.sessionContexts.set(sessionId, sessionMessages);
-        }
-      }
-      
-      // 获取会话历史消息
-      const sessionMessages = this.sessionContexts.get(sessionId) || [];
-      
-      // 更新会话元数据中的消息计数
-      const metadata = this.sessionMetadata.get(sessionId);
-      if (metadata) {
-        metadata.messageCount = sessionMessages.length + 1; // +1 为即将添加的消息
-        metadata.lastUsedAt = new Date();
-        this.sessionMetadata.set(sessionId, metadata);
+        messages.push({ 
+          role: 'system', 
+          content: `You are an AI assistant specializing in ${type} analysis. Provide accurate and helpful insights.` 
+        });
       }
       
       // 添加用户消息
-      messages = [
-        ...sessionMessages,
-        { role: 'user', content: prompt }
-      ];
-    } else {
-      // 无会话ID时的单次交互
-      messages = [
-        { role: 'system', content: enhancedSystemPrompt },
-        { role: 'user', content: prompt }
-      ];
-    }
-    
-    // 计算缓存键
-    const cacheKey = this.generateCacheKey(messages, model, temperature, requireJson);
-    
-    // 检查缓存
-    const cachedResponse = this.getCachedResponse(cacheKey, model);
-    if (cachedResponse && !sessionId) { // 对于会话，我们不使用缓存
-      if (this.verbose) {
-        console.info(`[LLMServiceHub] 使用缓存响应，提示: "${prompt.substring(0, 50)}..."`);
-      }
-      return cachedResponse;
-    }
-    
-    // API请求
-    try {
-      let response = '';
+      const userContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      messages.push({ role: 'user', content: userContent });
       
-      // 根据不同模型选择不同的API格式
-      if (model.includes('qwen')) {
-        response = await this.callQwenAPI(messages, model, temperature, requireJson);
-      } else if (model.includes('claude')) {
-        response = await this.callClaudeAPI(messages, model, temperature, requireJson);
-      } else {
-        response = await this.callOpenAIAPI(messages, model, temperature, requireJson);
-      }
+      // 调用模型
+      logger.debug('开始LLM分析', { type, messageCount: messages.length });
       
-      // 如果有会话ID，保存助手的回复到会话历史
-      if (sessionId) {
-        const sessionMessages = this.sessionContexts.get(sessionId) || [];
-        sessionMessages.push({ role: 'assistant', content: response });
-        
-        // 保持会话历史在最大长度以内
-        if (sessionMessages.length > this.maxContextLength + 1) { // +1 为系统提示
-          sessionMessages.splice(1, sessionMessages.length - this.maxContextLength - 1);
+      // 打印大模型输入prompt，增加source字段
+      logger.info('LLM调用输入', { model: this.defaultModel, source: type, messages });
+      // 执行API调用
+      const response = await this.callModel(
+        type,
+        messages,
+        this.defaultModel,
+        temperature,
+        requireJson
+      );
+      
+      // 处理JSON响应
+      if (requireJson) {
+        try {
+          const jsonResponse = JSON.parse(response);
+          logger.debug('LLM分析完成', { type, format: 'json' });
+          return jsonResponse;
+        } catch (e) {
+          // 尝试清理JSON字符串
+          const cleanedJson = this.cleanJsonString(response);
+          if (cleanedJson) {
+            logger.debug('LLM分析完成 (修复JSON)', { type, format: 'json' });
+            return JSON.parse(cleanedJson);
+          }
+          
+          logger.warn('LLM返回的JSON格式无效', { 
+            error: (e as Error).message,
+            response: response.substring(0, 100) + '...' 
+          });
+          
+          // 如果无法解析为JSON，直接返回原文本
+          return response;
         }
-        
-        this.sessionContexts.set(sessionId, sessionMessages);
       }
       
-      // 缓存响应（非会话）
-      if (!sessionId) {
-        this.cacheResponse(cacheKey, response, model);
-      }
-      
+      logger.debug('LLM分析完成', { type, format: 'text' });
       return response;
-    } catch (error: any) {
-      console.error('[LLMServiceHub] 错误: ', error);
+    } catch (error) {
+      logger.error('LLM分析失败', { type, error });
       throw error;
     }
   }
   
   /**
-   * 调用OpenAI API
+   * 调用LLM模型
+   * @param type 分析类型
+   * @param messages 消息列表
+   * @param model 模型名称
+   * @param temperature 温度参数
+   * @param requireJson 是否需要JSON输出
+   * @returns 模型响应文本
    */
-  private async callOpenAIAPI(
+  private async callModel(
+    type: string,
     messages: LLMMessage[],
-    model: string,
-    temperature: number,
-    requireJson: boolean
+    model: string = this.defaultModel,
+    temperature: number = 0.5,
+    requireJson: boolean = false
   ): Promise<string> {
-    const url = `${this.baseURL}/chat/completions`;
-    
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.apiKey}`
-    };
-    
-    const data = {
-      model,
-      messages,
-      temperature,
-      response_format: requireJson ? { type: 'json_object' } : undefined,
-      max_tokens: 2048
-    };
-    
-    const response = await axios.post(url, data, {
-      headers,
-      timeout: this.timeout
-    });
-    
-    return response.data.choices[0].message.content;
-  }
-  
-  /**
-   * 调用Qwen API
-   */
-  private async callQwenAPI(
-    messages: LLMMessage[],
-    model: string,
-    temperature: number,
-    requireJson: boolean
-  ): Promise<string> {
-    const url = `${this.baseURL}/chat/completions`;
-    
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.apiKey}`
-    };
-    
-    // 针对Qwen模型的特殊处理
-    // 模型名称映射 - Qwen API要求特定的模型名称格式
-    let mappedModel = model;
-    if (model === 'qwen-plus') {
-      mappedModel = 'qwen-max';
-    } else if (model === 'qwen-turbo') {
-      mappedModel = 'qwen-turbo';
-    } else if (!model.startsWith('qwen-')) {
-      mappedModel = 'qwen-max'; // 默认使用qwen-max
-    }
-    
-    // 对JSON响应请求的特殊处理
-    let systemMessage = messages.find(m => m.role === 'system');
-    if (requireJson && systemMessage) {
-      // 确保系统消息包含返回JSON的明确指令
-      if (!systemMessage.content.includes('JSON') && !systemMessage.content.includes('json')) {
-        systemMessage.content += '\n\nYour response must be a valid JSON object. Do not include any markdown formatting like ```json or ``` in your response.';
-      }
-    }
-    
-    // 构建请求数据
-    const data = {
-      model: mappedModel,
-      messages,
-      temperature,
-      response_format: requireJson ? { type: 'json_object' } : undefined,
-      max_tokens: 1500
-    };
-    
-    // 打印debug信息
-    if (this.verbose) {
-      console.log(`[LLMServiceHub] 发送请求到Qwen API: ${url}`);
-      console.log(`[LLMServiceHub] 使用模型: ${mappedModel}`);
-      console.log(`[LLMServiceHub] 消息数量: ${messages.length}`);
-      if (requireJson) {
-        console.log(`[LLMServiceHub] 请求JSON响应格式`);
-      }
-    }
-    
     try {
-      const response = await axios.post(url, data, {
-        headers,
-        timeout: this.timeout
+      logger.debug('调用LLM模型', { model, temperature, messageCount: messages.length });
+      
+      // 为需要JSON输出的请求添加指导
+      if (requireJson) {
+        // 修改系统消息以指定JSON输出
+        const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+        if (systemMessageIndex !== -1) {
+          messages[systemMessageIndex].content += '\nYou should provide your response in valid JSON format.';
+        } else {
+          // 如果没有系统消息，添加一个
+          messages.unshift({
+            role: 'system',
+            content: 'You should provide your response in valid JSON format.'
+          });
+        }
+      }
+      
+      // 记录请求开始
+      const requestId = crypto.randomUUID().slice(0, 8);
+      const startTime = Date.now();
+      
+      // 根据模型类型选择不同的API请求格式和认证方式
+      let requestOptions: RequestInit;
+      let apiUrl: string;
+      
+      // 检查是否为Qwen/阿里云模型
+      if (model.startsWith('qwen')) {
+        // 使用DashScope API密钥和特定请求格式
+        const dashscopeApiKey = process.env.DASHSCOPE_API_KEY || this.apiKey;
+        
+        if (!dashscopeApiKey) {
+          throw new Error('未设置阿里云DashScope API密钥，请设置DASHSCOPE_API_KEY环境变量');
+        }
+        
+        requestOptions = {
+          method: 'POST',
+          headers: {
+      'Content-Type': 'application/json',
+            'Authorization': `Bearer ${dashscopeApiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+      temperature,
+            max_tokens: 4096,
+            top_p: 1
+          })
+        };
+        
+        apiUrl = `${this.baseUrl}/chat/completions`;
+        logger.debug(`API请求开始 [${requestId}]`, { 
+          url: apiUrl,
+          model,
+          apiType: 'dashscope'
+        });
+      } else if (model.startsWith('claude') || model.startsWith('anthropic/')) {
+        // Anthropic Claude模型处理
+        const anthropicApiKey = process.env.ANTHROPIC_API_KEY || this.apiKey;
+        
+        if (!anthropicApiKey) {
+          throw new Error('未设置Anthropic API密钥，请设置ANTHROPIC_API_KEY环境变量');
+        }
+        
+        // 转换消息格式为Anthropic要求的格式
+        let systemPrompt = '';
+        let userMessages: any[] = [];
+        
+        messages.forEach(msg => {
+          if (msg.role === 'system') {
+            systemPrompt += msg.content + '\n';
+          } else {
+            userMessages.push({
+              role: msg.role,
+              content: msg.content
+            });
+          }
+        });
+        
+        // 如果有系统提示，将其添加到第一个用户消息
+        if (systemPrompt && userMessages.length > 0 && userMessages[0].role === 'user') {
+          userMessages[0].content = systemPrompt + '\n\n' + userMessages[0].content;
+        }
+        
+        requestOptions = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicApiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: model.replace('anthropic/', ''),
+            messages: userMessages,
+            temperature,
+            max_tokens: 4096
+          })
+        };
+        
+        apiUrl = `${this.baseUrl}/messages`;
+        logger.debug(`API请求开始 [${requestId}]`, { 
+          url: apiUrl,
+          model,
+          apiType: 'anthropic'
+        });
+      } else {
+        // 默认使用OpenAI API格式
+        requestOptions = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature,
+            max_tokens: 4096,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0
+          })
+        };
+        
+        apiUrl = `${this.baseUrl}/chat/completions`;
+        logger.debug(`API请求开始 [${requestId}]`, { 
+          url: apiUrl,
+          model,
+          apiType: 'openai'
+        });
+      }
+      
+      // 打印大模型输入prompt，增加source字段
+      logger.info('LLM调用输入', { model, source: type, messages });
+      // 执行请求
+      const response = await fetch(apiUrl, requestOptions);
+      
+      // 计算请求时间
+      const endTime = Date.now();
+      const requestTime = endTime - startTime;
+      
+      // 详细记录API响应
+      if (!response.ok) {
+        // 获取完整的错误响应
+        let errorDetail;
+        try {
+          errorDetail = await response.json();
+        } catch (parseError) {
+          // 如果无法解析为JSON，获取文本
+          try {
+            errorDetail = await response.text();
+          } catch (textError) {
+            errorDetail = '无法获取响应内容';
+          }
+        }
+        
+        // 详细记录API错误
+        logger.error('LLM API调用失败', { 
+          requestId,
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries([...response.headers.entries()]),
+          errorType: errorDetail.error?.type || '未知',
+          errorCode: errorDetail.error?.code || '未知',
+          errorMessage: errorDetail.error?.message || '未知错误',
+          requestTime: `${requestTime}ms`,
+          rawError: errorDetail
+        });
+        
+        throw new Error(`API调用失败 [${requestId}]: HTTP ${response.status} - ${errorDetail.error?.message || response.statusText || '未知错误'}`);
+      }
+      
+      // 处理成功响应
+      const responseText = await response.text();
+      let result: any;
+      
+      try {
+        result = JSON.parse(responseText);
+      } catch (e: any) {
+        logger.warn('API响应不是有效的JSON格式', { responseText: responseText.substring(0, 100) + '...' });
+        throw new Error(`API响应解析失败: ${e.message}`);
+      }
+      
+      // 根据不同API提取内容
+      let content = '';
+      
+      if (model.startsWith('qwen')) {
+        // DashScope/Qwen响应格式
+        content = result.output?.text || result.choices?.[0]?.message?.content || '';
+      } else if (model.startsWith('claude') || model.startsWith('anthropic/')) {
+        // Anthropic响应格式
+        content = result.content?.[0]?.text || '';
+      } else {
+        // OpenAI响应格式
+        content = result.choices?.[0]?.message?.content || '';
+      }
+      
+      // 打印大模型输出内容，增加source字段
+      logger.info('LLM调用输出', { model, source: type, output: content });
+      
+      logger.debug(`LLM API调用成功 [${requestId}]`, { 
+        model,
+        requestTime: `${requestTime}ms`,
+        tokensUsed: result.usage?.total_tokens || 'unknown',
+        promptTokens: result.usage?.prompt_tokens || 'unknown',
+        completionTokens: result.usage?.completion_tokens || 'unknown'
       });
       
-      if (this.verbose) {
-        console.log(`[LLMServiceHub] Qwen API响应状态: ${response.status}`);
-        console.log(`[LLMServiceHub] Qwen API响应数据预览: ${JSON.stringify(response.data).substring(0, 150)}...`);
-      }
-      
-      // 如果响应中有直接message内容，则提取，否则回退到choices
-      if (response.data.message && response.data.message.content) {
-        return response.data.message.content;
-      } else if (response.data.choices && response.data.choices.length > 0) {
-        return response.data.choices[0].message.content;
-      } else {
-        throw new Error('Qwen API响应格式异常');
-      }
+      return content;
     } catch (error: any) {
-      // 详细记录错误信息以便调试
-      console.error('[LLMServiceHub] Qwen API错误:');
-      
-      if (error.response) {
-        // 服务器响应错误
-        console.error(`状态码: ${error.response.status}`);
-        console.error(`响应头: ${JSON.stringify(error.response.headers)}`);
-        console.error(`响应体: ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        // 请求发送成功但没有收到响应
-        console.error('没有收到响应');
-        console.error(`请求: ${JSON.stringify(error.request)}`);
+      // 捕获和记录网络错误
+      if (error.name === 'TypeError' && error.message === 'fetch failed') {
+        // 网络连接错误
+        const cause = error.cause || {};
+        logger.error('LLM API网络连接错误', {
+          errorName: error.name,
+          errorMessage: error.message,
+          errorCode: cause.code || '未知',
+          errorCause: cause.message || '未知',
+          errorStack: error.stack
+        });
       } else {
-        // 设置请求时发生的错误
-        console.error(`错误消息: ${error.message}`);
+        // 其他错误
+        logger.error('LLM调用出错', { 
+          errorType: error.name || '未知类型',
+          errorMessage: error.message || '未知错误',
+          errorStack: error.stack
+        });
       }
-      
-      // 如果使用了requireJson但失败，尝试不使用JSON格式重试一次
-      if (requireJson) {
-        console.warn('[LLMServiceHub] 使用JSON格式请求失败，尝试以普通格式重试');
-        return this.callQwenAPI(messages, model, temperature, false);
-      }
-      
       throw error;
-    }
-  }
-  
-  /**
-   * 调用Claude API
-   */
-  private async callClaudeAPI(
-    messages: LLMMessage[],
-    model: string,
-    temperature: number,
-    requireJson: boolean
-  ): Promise<string> {
-    const url = `${this.baseURL}/messages`;
-    
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-api-key': this.apiKey,
-      'anthropic-version': '2023-06-01'
-    };
-    
-    // 将OpenAI格式消息转换为Claude格式
-    const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
-    const userMessages = messages.filter(m => m.role !== 'system');
-    
-    const data = {
-      model: model.replace('anthropic/', ''),
-      messages: userMessages,
-      system: systemPrompt,
-      temperature,
-      max_tokens: 2048
-    };
-    
-    const response = await axios.post(url, data, {
-      headers,
-      timeout: this.timeout
-    });
-    
-    return response.data.content[0].text;
-  }
-  
-  /**
-   * 执行通用分析
-   */
-  async analyze(analysisType: string, data: any, options: AnalysisOptions = {}): Promise<any> {
-    const systemPrompt = options.systemPrompt || 'You are an analytics expert who specializes in analyzing data and providing insights.';
-    const temperature = options.temperature || 0.7;
-    const format = options.format || 'json';
-    const language = options.language || 'en';
-    
-    // 构建提示
-    const prompt = JSON.stringify({
-      analysisType,
-      data,
-      requirements: {
-        format: format,
-        language: language
-      }
-    });
-    
-    // 生成会话ID
-    const sessionId = `ki_${analysisType}_${Date.now()}`;
-    
-    // 发送提示
-    const response = await this.sendPrompt(prompt, {
-      systemPrompt,
-      temperature,
-      requireJson: format === 'json',
-      sessionId,
-      language
-    });
-    
-    // 清理会话
-    this.clearSessionContext(sessionId);
-    
-    // 解析响应
-    if (format === 'json') {
-      return this.parseJsonResponse(response);
-    }
-    
-    return response;
-  }
-  
-  /**
-   * 识别关键词所属领域
-   */
-  async identifyDomain(keywords: string[], options: AnalysisOptions = {}): Promise<any> {
-    return this.analyze('identify_domain', {
-      keywords,
-      task: 'Identify the domains these keywords belong to'
-    }, {
-      ...options,
-      systemPrompt: 'You are a domain classification expert who identifies the industries and subject areas keywords belong to.',
-      format: 'json'
-    });
-  }
-  
-  /**
-   * 模拟用户搜索旅程
-   */
-  async simulateUserJourney(initialQuery: string, options: AnalysisOptions = {}): Promise<any> {
-    return this.analyze('user_journey_simulation', {
-      initialQuery,
-      task: 'Simulate a complete user search journey starting with this query',
-      format_requirements: {
-        expected_structure: {
-          initialQuery: "string - the initial search query",
-          steps: [
-            {
-              query: "string - the search query",
-              intentType: "string - categorized intent like informational, commercial, navigational, etc.",
-              expectedResults: ["array of expected search results"],
-              userAction: "string - what the user does with the results",
-              reasoning: "string - why the user moved to this query"
-            }
-          ],
-          mainIntent: "string - the primary intent across the journey"
-        },
-        example: {
-          "initialQuery": "智能手机",
-          "steps": [
-            {
-              "query": "智能手机",
-              "intentType": "informational",
-              "expectedResults": ["智能手机基本信息", "各品牌智能手机介绍"],
-              "userAction": "浏览搜索结果",
-              "reasoning": "初始搜索，了解基本信息"
-            },
-            {
-              "query": "智能手机推荐2023",
-              "intentType": "commercial",
-              "expectedResults": ["2023年热门智能手机排行", "各价位手机推荐"],
-              "userAction": "查看产品排行榜",
-              "reasoning": "想了解最新的手机推荐"
-            },
-            {
-              "query": "iPhone和华为手机对比",
-              "intentType": "comparison",
-              "expectedResults": ["iPhone与华为手机性能对比", "价格对比"],
-              "userAction": "阅读对比文章",
-              "reasoning": "缩小选择范围，比较两个主要品牌"
-            }
-          ],
-          "mainIntent": "purchase_decision"
-        },
-        instructions: [
-          "Always include at least 3-5 steps in the journey",
-          "Make sure to properly reflect how users refine their searches",
-          "Include different intent types as the user's needs evolve",
-          "Ensure each step logically follows from the previous one",
-          "All fields must be included and properly formatted"
-        ]
-      }
-    }, {
-      ...options,
-      systemPrompt: 'You are a user behavior expert who understands how people navigate search engines to find information. You MUST return a journey with all the specified fields and follow the exact format provided in the example.',
-      format: 'json'
-    });
-  }
-  
-  /**
-   * 分析跨领域关系
-   */
-  async analyzeCrossDomain(keywords: string[], domains: string[], options: AnalysisOptions = {}): Promise<any> {
-    return this.analyze('cross_domain_analysis', {
-      keywords,
-      domains,
-      task: 'Analyze relationships between different domains represented in these keywords'
-    }, {
-      ...options,
-      systemPrompt: 'You are a cross-domain analysis expert who identifies connections between different fields and industries.',
-      format: 'json'
-    });
-  }
-  
-  /**
-   * 预测关键词价值
-   */
-  async predictKeywordValue(keywords: string[], options: AnalysisOptions = {}): Promise<any> {
-    return this.analyze('keyword_value_prediction', {
-      keywords,
-      task: 'Predict the commercial value and competition level for these keywords'
-    }, {
-      ...options,
-      systemPrompt: 'You are a keyword value assessment expert who analyzes the commercial potential and competition level of search terms.',
-      format: 'json'
-    });
-  }
-  
-  /**
-   * 增强系统提示
-   */
-  private enhanceSystemPrompt(basePrompt: string, language: string): string {
-    // 根据语言调整特定指令
-    const languageInstruction = language === 'zh' 
-      ? '请用中文回复。'
-      : 'Please respond in English.';
-    
-    return `${basePrompt}\n\nYour responses should be thorough, accurate, and directly relevant to the query. ${languageInstruction}`;
-  }
-  
-  /**
-   * 生成缓存键
-   */
-  private generateCacheKey(messages: LLMMessage[], model: string, temperature: number, requireJson: boolean): string {
-    // 创建包含所有相关参数的缓存键
-    const dataToHash = JSON.stringify({
-      messages,
-      model,
-      temperature,
-      requireJson
-    });
-    
-    return crypto.createHash('md5').update(dataToHash).digest('hex');
-  }
-  
-  /**
-   * 从缓存获取响应
-   */
-  private getCachedResponse(cacheKey: string, model: string): string | null {
-    const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
-    
-    if (fs.existsSync(cachePath)) {
-      try {
-        const cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8')) as CacheItem;
-        const now = Date.now();
-        
-        // 检查缓存是否过期
-        if (now - cacheData.timestamp < this.cacheExpiry * 1000) {
-          // 检查模型是否匹配
-          if (cacheData.model === model) {
-            return cacheData.response;
-          }
-        }
-      } catch (error) {
-        console.error(`[LLMServiceHub] 读取缓存错误: ${error}`);
-      }
-    }
-    
-    return null;
-  }
-  
-  /**
-   * 缓存响应
-   */
-  private cacheResponse(cacheKey: string, response: string, model: string): void {
-    const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
-    
-    try {
-      const cacheData: CacheItem = {
-        response,
-        timestamp: Date.now(),
-        model
-      };
-      
-      fs.writeFileSync(cachePath, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error(`[LLMServiceHub] 写入缓存错误: ${error}`);
-    }
-  }
-  
-  /**
-   * 清理会话上下文
-   */
-  clearSessionContext(sessionId: string): void {
-    if (this.sessionContexts.has(sessionId)) {
-      this.sessionContexts.delete(sessionId);
-      
-      if (this.verbose) {
-        console.info(`[LLMServiceHub] 已清理会话: ${sessionId}`);
-      }
-    }
-    
-    if (this.sessionMetadata.has(sessionId)) {
-      this.sessionMetadata.delete(sessionId);
-    }
-  }
-  
-  /**
-   * 获取会话信息
-   */
-  getSessionInfo(sessionId: string): SessionMetadata | null {
-    return this.sessionMetadata.get(sessionId) || null;
-  }
-  
-  /**
-   * 解析JSON响应
-   */
-  parseJsonResponse<T>(response: string): T {
-    try {
-      // 尝试直接解析
-      return JSON.parse(response) as T;
-    } catch (error) {
-      try {
-        // 尝试提取JSON部分 - 查找最外层的大括号对
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const jsonContent = jsonMatch[0];
-          return JSON.parse(jsonContent) as T;
-        }
-        
-        // 尝试通过替换常见错误格式来修复JSON
-        const cleanedJson = this.cleanJsonString(response);
-        if (cleanedJson) {
-          return JSON.parse(cleanedJson) as T;
-        }
-        
-        throw new Error('无法解析JSON响应');
-      } catch (jsonError) {
-        console.error('[LLMServiceHub] JSON解析错误, 原始响应:', response);
-        
-        // 尝试构建一个基本的对象作为后备
-        try {
-          // 从文本中提取可能的键值对
-          const fallbackObject = this.createFallbackObject(response);
-          if (Object.keys(fallbackObject).length > 0) {
-            console.warn('[LLMServiceHub] 使用后备对象作为解析结果');
-            return fallbackObject as unknown as T;
-          }
-        } catch (e) {
-          // 忽略后备解析错误
-        }
-        
-        throw new Error(`JSON解析失败: ${jsonError}`);
-      }
     }
   }
   
   /**
    * 清理JSON字符串，修复常见格式问题
+   * @param input 输入的JSON字符串
+   * @returns 清理后的JSON字符串，或null
    */
   private cleanJsonString(input: string): string | null {
     try {
-      // 移除可能的markdown代码块标记
-      let cleaned = input.replace(/```json|```/g, '').trim();
+      logger.debug('清理JSON字符串', {
+        inputLength: input.length,
+        inputPreview: input.substring(0, 100) + (input.length > 100 ? '...' : '')
+      });
+      
+      // 移除可能的markdown代码块标记 - 先检测是否存在
+      const hasJsonBlock = input.includes('```json') || input.includes('```');
+      if (hasJsonBlock) {
+        logger.debug('检测到Markdown代码块，尝试清理');
+      }
+
+      // 更彻底的代码块处理
+      let cleaned = input;
+      
+      // 处理包含```json的情况
+      if (cleaned.includes('```json')) {
+        // 尝试提取代码块内容
+        const blockStart = cleaned.indexOf('```json') + 7;
+        const blockEnd = cleaned.lastIndexOf('```');
+        
+        if (blockEnd > blockStart) {
+          cleaned = cleaned.substring(blockStart, blockEnd).trim();
+          logger.debug('从```json代码块中提取内容');
+        }
+      } 
+      // 处理普通```代码块
+      else if (cleaned.includes('```')) {
+        const blocks = cleaned.split('```');
+        // 通常，代码块内容在奇数索引位置 (1, 3, 5...)
+        for (let i = 1; i < blocks.length; i += 2) {
+          if (blocks[i].trim().startsWith('{') && blocks[i].trim().endsWith('}')) {
+            cleaned = blocks[i].trim();
+            logger.debug('从```代码块中提取内容');
+            break;
+          }
+        }
+      }
       
       // 确保只保留一个完整的JSON对象
       const firstBrace = cleaned.indexOf('{');
@@ -737,7 +461,13 @@ export class LLMServiceHub {
       
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+        logger.debug('提取JSON对象边界', { 
+          startPos: firstBrace,
+          endPos: lastBrace,
+          extractedLength: cleaned.length 
+        });
       } else {
+        logger.warn('无法在字符串中找到完整的JSON对象边界');
         return null;
       }
       
@@ -754,131 +484,19 @@ export class LLMServiceHub {
         .replace(/\/\*[\s\S]*?\*\//g, '');
       
       // 验证是否可以解析
-      JSON.parse(cleaned);
+      cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+      const parsed = JSON.parse(cleaned);
+      logger.debug('JSON清理成功', { 
+        cleanedLength: cleaned.length,
+        objectKeys: Object.keys(parsed).length
+      });
       return cleaned;
-    } catch (e) {
+    } catch (e: any) {
+      logger.warn('JSON清理失败', { 
+        error: e.message,
+        stack: e.stack
+      });
       return null;
-    }
-  }
-  
-  /**
-   * 从文本中创建后备对象
-   */
-  private createFallbackObject(text: string): Record<string, any> {
-    const result: Record<string, any> = {};
-    
-    // 尝试提取键值对
-    const pairs = text.match(/"([^"]+)"\s*:\s*("[^"]*"|[0-9]+|true|false|\[[^\]]*\]|\{[^}]*\})/g);
-    
-    if (pairs) {
-      pairs.forEach(pair => {
-        try {
-          // 将单个键值对包装在对象中解析
-          const wrappedPair = `{${pair}}`;
-          const parsed = JSON.parse(wrappedPair);
-          const key = Object.keys(parsed)[0];
-          result[key] = parsed[key];
-        } catch (e) {
-          // 忽略无法解析的键值对
-        }
-      });
-    }
-    
-    // 如果没有找到键值对，尝试提取分类或列表
-    if (Object.keys(result).length === 0) {
-      // 检查是否有分类列表
-      const categories = text.match(/[Cc]ategor(y|ies):\s*(.*?)$/m);
-      if (categories && categories[2]) {
-        result.categories = categories[2].split(/[,;]/).map(c => c.trim());
-      }
-      
-      // 检查是否有关键词列表
-      const keywords = text.match(/[Kk]eywords?:\s*(.*?)$/m);
-      if (keywords && keywords[1]) {
-        result.keywords = keywords[1].split(/[,;]/).map(k => k.trim());
-      }
-      
-      // 检查是否有分析结果
-      const analysis = text.match(/[Aa]nalysis:\s*(.*?)$/m);
-      if (analysis && analysis[1]) {
-        result.analysis = analysis[1].trim();
-      }
-    }
-    
-    return result;
-  }
-  
-  /**
-   * 特定的意图分析方法
-   * 针对系统中最常用的意图分析场景优化
-   */
-  async analyzeIntent(keyword: string, suggestions: string[], options: AnalysisOptions = {}): Promise<any> {
-    const systemPrompt = options.systemPrompt || 
-      'You are an intent analysis expert who can identify the underlying user intent behind search queries.';
-    
-    // 制作更具体的任务描述，明确要求JSON格式
-    const prompt = JSON.stringify({
-      task: 'keyword_intent_analysis',
-      data: {
-        keyword,
-        suggestions
-      },
-      requirements: {
-        outputFormat: 'strictJson',
-        returnFormat: {
-          intents: [
-            {
-              type: "string",
-              confidence: "number",
-              patterns: ["string"]
-            }
-          ],
-          categories: {
-            "categoryName": ["keywords"]
-          },
-          recommendations: ["string"]
-        }
-      }
-    }, null, 2);
-    
-    // 发送带有额外JSON格式信息的提示
-    try {
-      const response = await this.sendPrompt(prompt, {
-        systemPrompt: systemPrompt + '\n\nYou must respond with strictly valid JSON format without any explanations, prefixes, or suffixes. Do not use markdown formatting.',
-        temperature: options.temperature || 0.3, // 使用较低温度以提高一致性
-        requireJson: true,
-        language: options.language || 'en'
-      });
-      
-      try {
-        // 尝试解析响应
-        return this.parseJsonResponse(response);
-      } catch (parseError) {
-        // 如果解析失败，返回一个基本结构，避免完全失败
-        console.warn('[LLMServiceHub] 意图分析JSON解析失败，使用后备结构');
-        
-        // 提取可能的意图信息
-        const intents = [];
-        const intentMatch = response.match(/intent|type|category/i);
-        if (intentMatch) {
-          intents.push({
-            type: "informational",
-            confidence: 0.7,
-            patterns: [keyword]
-          });
-        }
-        
-        return {
-          intents: intents,
-          categories: {
-            "general": [keyword]
-          },
-          recommendations: ["创建相关内容"]
-        };
-      }
-    } catch (error) {
-      console.error('[LLMServiceHub] 意图分析失败:', error);
-      throw error;
     }
   }
 } 

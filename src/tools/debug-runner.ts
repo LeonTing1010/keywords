@@ -11,6 +11,8 @@ import { BaiduSearchEngine } from '../providers/BaiduSearchEngine';
 import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { config } from '../config';
 import { AppError, ErrorType, handleError } from '../core/errorHandler';
+import { logger } from '../core/logger';
+import { AutocompleteSuggestion } from '../journey/AutocompleteTypes';
 
 // 创建日志目录
 const LOG_DIR = path.join(process.cwd(), 'logs', 'debug');
@@ -30,11 +32,11 @@ const createLogFileName = (prefix: string) => {
 
 // 控制台日志功能
 const log = {
-  info: (message: string) => console.log(`[INFO] ${message}`),
-  debug: (message: string) => console.log(`[DEBUG] ${message}`),
-  warn: (message: string) => console.warn(`[WARN] ${message}`),
-  error: (message: string) => console.error(`[ERROR] ${message}`),
-  success: (message: string) => console.log(`[SUCCESS] ${message}`)
+  info: (message: string) => logger.info(message, { component: 'debug-runner' }),
+  debug: (message: string) => logger.debug(message, { component: 'debug-runner' }),
+  warn: (message: string) => logger.warn(message, { component: 'debug-runner' }),
+  error: (message: string) => logger.error(message, { component: 'debug-runner' }),
+  success: (message: string) => logger.info(`✓ ${message}`, { component: 'debug-runner' })
 };
 
 /**
@@ -55,9 +57,9 @@ async function runNetworkDiagnostics() {
     
     // 执行一个简单查询
     log.debug('执行诊断查询...');
-    const result = await engine.getSuggestions('test query');
+    const suggestions = await engine.getSuggestions('test query');
     
-    log.success(`查询成功! 返回${result.suggestions.length}个结果.`);
+    log.success(`查询成功! 返回${suggestions.length}个结果.`);
     
     // 关闭引擎
     await engine.close();
@@ -76,7 +78,7 @@ async function runNetworkDiagnostics() {
 async function runLLMDiagnostics() {
   log.info('开始运行LLM服务诊断...');
   
-  if (!config.llm.apiKey) {
+  if (!process.env.OPENAI_API_KEY) {
     log.warn('未找到LLM API密钥，请设置环境变量OPENAI_API_KEY');
     return false;
   }
@@ -84,28 +86,26 @@ async function runLLMDiagnostics() {
   try {
     // 创建LLM服务实例
     const llmService = new LLMServiceHub({
-      model: config.llm.defaultModel,
-      apiKey: config.llm.apiKey
+      model: config.llm.defaultModel
     });
     
     // 执行简单的提示
     log.debug('向LLM发送测试提示...');
-    const response = await llmService.sendPrompt(
-      '返回一个JSON，包含三个关键词类别：{"informational":["example"],"commercial":["example"],"educational":["example"]}',
-      {
-        systemPrompt: '你是一个专业的关键词分析师。',
-        requireJson: true
-      }
-    );
+    const response = await llmService.analyze('test_categorization', {
+      task: '将关键词分类为三个类别',
+      categories: ['informational', 'commercial', 'educational']
+    }, {
+      systemPrompt: '你是一个专业的关键词分析师。',
+      format: 'json'
+    });
     
-    log.debug(`LLM响应: ${response.substring(0, 100)}...`);
+    log.debug('LLM响应成功');
     
-    // 尝试解析JSON
-    try {
-      const parsedResponse = JSON.parse(response);
-      log.success('JSON解析成功!');
-    } catch (error) {
-      log.warn(`JSON解析失败: ${(error as Error).message}`);
+    // 检查响应对象
+    if (response && typeof response === 'object') {
+      log.success('JSON响应格式正确!');
+    } else {
+      log.warn('响应不是有效的JSON对象');
     }
     
     return true;
@@ -136,11 +136,11 @@ async function runSearchEngineDiagnostics(keyword: string = 'test', engineType: 
     
     // 执行查询
     log.debug(`执行查询: "${keyword}"...`);
-    const result = await engine.getSuggestions(keyword);
+    const suggestions = await engine.getSuggestions(keyword);
     
-    log.success(`查询成功! 返回${result.suggestions.length}个结果:`);
-    result.suggestions.forEach((suggestion: string, index: number) => {
-      console.log(`  ${index + 1}. ${suggestion}`);
+    log.success(`查询成功! 返回${suggestions.length}个结果:`);
+    suggestions.forEach((suggestion: AutocompleteSuggestion, index: number) => {
+      log.info(`  ${index + 1}. ${suggestion.query}`);
     });
     
     // 关闭引擎

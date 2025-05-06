@@ -1,6 +1,6 @@
 {
   "name": "keywordintent",
-  "version": "3.0.0",
+  "version": "3.3.0",
   "main": "keywordIntent.ts",
   "scripts": {
     "keywords": "ts-node keywordIntent.ts",
@@ -12,9 +12,11 @@
     "debug:tools": "./debug-tools.sh",
     "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
     "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
+    "check-config": "ts-node src/tools/config-check.ts",
     "simple": "ts-node keywordIntent.ts --no-llm",
     "analyze": "ts-node keywordIntent.ts",
-    "intent": "ts-node keywordIntent.ts",
+    "intent": "ts-node keywordIntent.ts --",
+    "report": "ts-node test-scripts/generate-markdown-report.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:workflow": "ts-node src/test/workflowControllerTest.ts"
@@ -46,14 +48,15 @@
   "dependencies": {
     "@types/fs-extra": "^11.0.4",
     "axios": "^1.6.7",
+    "chart.js": "^4.3.0",
+    "d3": "^7.8.5",
     "dotenv": "^16.5.0",
     "fs-extra": "^11.3.0",
     "handlebars": "^4.7.8",
+    "marked": "^15.0.11",
+    "openai": "^4.24.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3",
-    "chart.js": "^4.3.0",
-    "d3": "^7.8.5",
-    "openai": "^4.24.1"
+    "typescript": "^5.8.3"
   },
   "bin": {
     "keywordintent": "./keywordIntent.ts"

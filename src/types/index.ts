@@ -203,17 +203,6 @@ export interface DiscoveryResult {
   summary: string;                 // 总结
 }
 
-/**
- * LLM配置选项
- */
-export interface LLMServiceOptions {
-  apiKey?: string;                 // API密钥
-  model?: string;                  // 模型
-  timeout?: number;                // 超时时间
-  maxRetries?: number;             // 最大重试次数
-  baseURL?: string;                // API基础URL
-}
-
 // 重新导出搜索引擎相关类型
 export * from './searchEngineTypes';
 export * from './llmTypes';

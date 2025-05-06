@@ -3,6 +3,7 @@
  * 提供生成统一格式、全局唯一的会话ID
  */
 import { createHash } from 'crypto';
+import { logger } from '../core/logger';
 
 /**
  * 会话类型枚举
@@ -25,7 +26,7 @@ export function generateSessionId(type: SessionType, keyword: string, suffix?: s
   const timestamp = Date.now();
   const randomStr = Math.random().toString(36).substring(2, 10);
   const keywordHash = createHash('md5').update(keyword).digest('hex').substring(0, 8);
-  const version = '3_0'; // 当前版本3.0
+  const version = '3_3'; // 当前版本3.3.0
   
   return `${prefix}_${type}_${version}_${keywordHash}_${timestamp}_${randomStr}${suffix ? '_' + suffix : ''}`;
 }
@@ -58,7 +59,7 @@ export function parseSessionId(sessionId: string): {
       suffix: parts.length > 6 ? parts.slice(6).join('_') : undefined
     };
   } catch (e) {
-    console.warn(`[会话ID] 解析失败: ${sessionId}`);
+    logger.warn(`会话ID解析失败`, { sessionId });
     return {};
   }
 }

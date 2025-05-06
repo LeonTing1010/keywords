@@ -14,9 +14,11 @@ function getBaseURL(model: string): string {
   // 根据模型类型自动选择适当的基础URL
   if (model.startsWith('anthropic/') || model.startsWith('claude')) {
     return 'https://api.anthropic.com/v1';
+  } else if (model.startsWith('qwen')) {
+    return 'https://dashscope.aliyuncs.com/compatible-mode/v1';
   } else {
     // 默认使用OpenAI
-    return 'https://api.openai.com/v1';
+    return process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
   }
 }
 
