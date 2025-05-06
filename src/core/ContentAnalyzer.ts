@@ -66,16 +66,18 @@ export class ContentAnalyzer {
       // 3. 调用LLM分析内容质量与需求满足度
       const analysis = await this.llmService.analyze('unmet_needs_verification', promptData, {
         format: 'json',
-        systemPrompt: `分析以下关键词的搜索结果，判断这个需求是否已经被互联网上的内容充分满足。
+        systemPrompt: `分析以下关键词的搜索结果，判断这个需求是否是互联网上尚未被充分满足的高价值需求。
 评估标准:
-1. 内容完整性 - 结果是否全面覆盖了用户需求？
-2. 内容质量 - 结果是否提供了高质量信息？
-3. 内容可用性 - 用户能否容易地理解并应用这些信息？
+1. 需求真实性 - 这是否是用户真实存在的需求？
+2. 内容缺口 - 搜索结果是否有明显缺失或不满足用户搜索意图？
+3. 市场价值 - 这个未满足需求是否具有商业价值或长尾价值？
+4. 需求紧迫性 - 用户是否迫切需要解决方案？
+5. 实现难度 - 满足这个需求的解决方案实现难度如何？
 
-以JSON格式返回: {
-  "isUnmetNeed": true/false,    // 是否未被满足的需求
-  "contentQuality": 0.7,        // 内容质量分数 (0-1)
-  "reason": "详细解释内容不足或质量问题的原因"
+以JSON格式返回精简结果: {
+  "isUnmetNeed": true/false,    // 是否未被满足的高价值需求
+  "contentQuality": 0.7,        // 现有内容满足度评分 (0-1，越低表示缺口越大)
+  "reason": "简明扼要解释为什么这是高价值未满足需求或为什么不是"
 }`
       });
       

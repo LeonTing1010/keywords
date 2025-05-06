@@ -319,14 +319,21 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
     
     // 添加生成时间和版本信息
     const date = new Date(result.generatedAt);
-    markdown += `> ${this.i18n.generatedAt}: ${date.toLocaleString()} | KeywordIntent v${result.version}\n\n`;
+    markdown += `> ${this.i18n.generatedAt}: ${date.toLocaleString()} | NeedMiner v${result.version}\n\n`;
     
-    // 添加目录
-    markdown += this.generateTableOfContents();
+    // 首先添加未满足需求部分 - 核心价值放在最前面
+    if (result.unmetNeeds && result.unmetNeeds.length > 0) {
+      markdown += `## ${this.i18n.unmetNeeds}\n\n`;
+      markdown += this.generateUnmetNeedsSection(result);
+      markdown += '\n\n';
+    }
     
     // 添加摘要部分
     markdown += `## ${this.i18n.summary}\n\n`;
     markdown += this.generateSummaryPlaceholder(result);
+    
+    // 添加简化的目录
+    markdown += this.generateSimplifiedTableOfContents(result);
     
     // 添加概览部分
     markdown += `## ${this.i18n.overview}\n\n`;
@@ -339,37 +346,23 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
     markdown += `### ${this.i18n.keyInsights}\n\n`;
     markdown += this.generateKeyInsightsPlaceholder(result);
     
-    // 关键词分析部分
+    // 关键词分析部分 - 精简
     markdown += `## ${this.i18n.keywordAnalysis}\n\n`;
     
-    // 关键词分布
-    markdown += `### ${this.i18n.distribution}\n\n`;
-    markdown += this.generateDistributionSection(result);
-    
-    // 高价值关键词
+    // 高价值未满足需求 - 这部分特别重要
     markdown += `### ${this.i18n.highValue}\n\n`;
     markdown += this.generateHighValueKeywordsSection(result);
-    
-    // 用户旅程部分
-    if (result.journeyAnalysis) {
-      markdown += `## ${this.i18n.userJourney}\n\n`;
-      markdown += this.generateUserJourneySection(result);
-    }
     
     // 建议部分
     markdown += `## ${this.i18n.recommendations}\n\n`;
     
-    // 内容策略
+    // 内容策略 - 更关注解决方案
     markdown += `### ${this.i18n.contentStrategy}\n\n`;
     markdown += this.generateContentStrategyPlaceholder(result);
     
-    // SEO建议
+    // 市场验证建议
     markdown += `### ${this.i18n.seoRecommendations}\n\n`;
     markdown += this.generateSEORecommendationsPlaceholder(result);
-    
-    // 内容创作思路
-    markdown += `### ${this.i18n.contentIdeas}\n\n`;
-    markdown += this.generateContentIdeasPlaceholder(result);
     
     // 实施步骤
     markdown += `### ${this.i18n.implementationSteps}\n\n`;
@@ -379,12 +372,6 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
     markdown += `## ${this.i18n.conclusion}\n\n`;
     markdown += this.generateConclusionPlaceholder(result);
     
-    // 添加未满足需求部分
-    if (result.unmetNeeds && result.unmetNeeds.length > 0) {
-      markdown += `\n\n## ${this.i18n.unmetNeeds}\n\n`;
-      markdown += this.generateUnmetNeedsSection(result);
-    }
-    
     // 提示这部分将由AI完成
     markdown += `\n---\n\n*${this.i18n.aiEnhanced}*\n`;
     
@@ -392,30 +379,30 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
   }
 
   /**
-   * 生成目录
+   * 生成简化的目录
    * @returns 目录的Markdown内容
    */
-  private generateTableOfContents(): string {
-    return `## 目录
-
-1. [${this.i18n.summary}](#${this.slugify(this.i18n.summary)})
-2. [${this.i18n.overview}](#${this.slugify(this.i18n.overview)})
-   - [${this.i18n.keyStats}](#${this.slugify(this.i18n.keyStats)})
-   - [${this.i18n.keyInsights}](#${this.slugify(this.i18n.keyInsights)})
-3. [${this.i18n.keywordAnalysis}](#${this.slugify(this.i18n.keywordAnalysis)})
-   - [${this.i18n.distribution}](#${this.slugify(this.i18n.distribution)})
-   - [${this.i18n.highValue}](#${this.slugify(this.i18n.highValue)})
-4. [${this.i18n.userJourney}](#${this.slugify(this.i18n.userJourney)})
-5. [${this.i18n.recommendations}](#${this.slugify(this.i18n.recommendations)})
-   - [${this.i18n.contentStrategy}](#${this.slugify(this.i18n.contentStrategy)})
-   - [${this.i18n.seoRecommendations}](#${this.slugify(this.i18n.seoRecommendations)})
-   - [${this.i18n.contentIdeas}](#${this.slugify(this.i18n.contentIdeas)})
-   - [${this.i18n.implementationSteps}](#${this.slugify(this.i18n.implementationSteps)})
-6. [${this.i18n.conclusion}](#${this.slugify(this.i18n.conclusion)})
-
----
-
-`;
+  private generateSimplifiedTableOfContents(result: WorkflowResult): string {
+    let toc = `## 目录\n\n`;
+    
+    // 如果有未满足需求，将其放在第一位
+    if (result.unmetNeeds && result.unmetNeeds.length > 0) {
+      toc += `1. [${this.i18n.unmetNeeds}](#${this.slugify(this.i18n.unmetNeeds)})\n`;
+      toc += `2. [${this.i18n.summary}](#${this.slugify(this.i18n.summary)})\n`;
+      toc += `3. [${this.i18n.overview}](#${this.slugify(this.i18n.overview)})\n`;
+      toc += `4. [${this.i18n.keywordAnalysis}](#${this.slugify(this.i18n.keywordAnalysis)})\n`;
+      toc += `5. [${this.i18n.recommendations}](#${this.slugify(this.i18n.recommendations)})\n`;
+      toc += `6. [${this.i18n.conclusion}](#${this.slugify(this.i18n.conclusion)})\n`;
+    } else {
+      toc += `1. [${this.i18n.summary}](#${this.slugify(this.i18n.summary)})\n`;
+      toc += `2. [${this.i18n.overview}](#${this.slugify(this.i18n.overview)})\n`;
+      toc += `3. [${this.i18n.keywordAnalysis}](#${this.slugify(this.i18n.keywordAnalysis)})\n`;
+      toc += `4. [${this.i18n.recommendations}](#${this.slugify(this.i18n.recommendations)})\n`;
+      toc += `5. [${this.i18n.conclusion}](#${this.slugify(this.i18n.conclusion)})\n`;
+    }
+    
+    toc += '\n---\n\n';
+    return toc;
   }
 
   /**
@@ -659,28 +646,25 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
       return '未发现未满足需求。';
     }
     
-    let content = `以下是与"${result.keyword}"相关的、当前内容质量不足的需求:\n\n`;
+    let content = `### 已发现 ${result.unmetNeeds.length} 个未满足的高价值需求\n\n`;
     
-    // 添加未满足需求表格
-    content += '| 需求关键词 | 内容质量评分 | 未满足原因 |\n';
-    content += '|------------|--------------|------------|\n';
+    // 添加未满足需求表格 - 简化样式并突出重点
+    content += '| 需求关键词 | 缺口评分 | 原因 |\n';
+    content += '|------------|----------|------|\n';
     
     result.unmetNeeds.forEach(need => {
       const qualityScore = (need.contentQuality * 100).toFixed(0) + '%';
-      content += `| **${need.keyword}** | ${qualityScore} | ${need.reason} |\n`;
+      content += `| **${need.keyword}** | **${qualityScore}** | ${need.reason} |\n`;
     });
     
-    content += '\n\n这些未满足需求代表了潜在的内容机会，可以针对性地创建高质量内容来填补这些空缺。\n\n';
+    content += '\n\n> **市场机会**: 这些未满足需求代表了潜在的产品/内容创作机会，针对性地创建高质量解决方案可能具有商业价值。\n\n';
     
-    // 添加简化解决方案和MVP冷启动方案的提示
-    content += '### 简化解决方案\n\n';
+    // 添加简化解决方案的提示
+    content += '### 解决方案建议\n\n';
     content += '*[待AI完成: 为每个未满足需求提供简化解决方案，侧重于低成本、快速实现的方法]*\n\n';
     
-    content += '### MVP冷启动方案\n\n';
-    content += '*[待AI完成: 详细描述每个未满足需求的冷启动MVP方案，包括最小可行产品特性、验证价值的关键指标、实施时间估计和所需资源估计]*\n\n';
-    
-    content += '### 优先级排序\n\n';
-    content += '*[待AI完成: 基于实施难度和潜在价值对未满足需求进行优先级排序，给出明确的实施建议]*\n\n';
+    content += '### 冷启动验证方案\n\n';
+    content += '*[待AI完成: 提供如何快速验证这些需求价值的方法，包括最小可行产品特性、验证指标和时间估计]*\n\n';
     
     return content;
   }
