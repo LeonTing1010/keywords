@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: MarkdownReportConfig = {
 // 多语言文本
 const TRANSLATIONS = {
   zh: {
-    reportTitle: 'KeywordIntent 分析报告',
+    reportTitle: 'NeedMiner 未满足需求分析报告',
     summary: '摘要',
     overview: '概览',
     keyStats: '核心统计',
@@ -42,16 +42,16 @@ const TRANSLATIONS = {
     iterations: '迭代次数',
     journeySteps: '旅程步骤',
     keyInsights: '关键发现',
-    keywordAnalysis: '关键词分析',
+    keywordAnalysis: '需求分析',
     distribution: '关键词分布',
-    highValue: '高价值关键词',
+    highValue: '高价值未满足需求',
     userJourney: '用户搜索旅程',
     searchIntent: '搜索意图分析',
     decisionPoints: '决策点',
     flowChart: '流程图',
     recommendations: '建议',
-    contentStrategy: '内容策略',
-    seoRecommendations: 'SEO建议',
+    contentStrategy: '解决方案策略',
+    seoRecommendations: '市场验证建议',
     contentIdeas: '内容创作思路',
     implementationSteps: '实施步骤',
     conclusion: '结论',
@@ -60,7 +60,7 @@ const TRANSLATIONS = {
     unmetNeeds: '未满足需求分析'
   },
   en: {
-    reportTitle: 'KeywordIntent Analysis Report',
+    reportTitle: 'NeedMiner Unmet Needs Analysis Report',
     summary: 'Executive Summary',
     overview: 'Overview',
     keyStats: 'Key Statistics',
@@ -68,16 +68,16 @@ const TRANSLATIONS = {
     iterations: 'Iterations',
     journeySteps: 'Journey Steps',
     keyInsights: 'Key Insights',
-    keywordAnalysis: 'Keyword Analysis',
+    keywordAnalysis: 'Needs Analysis',
     distribution: 'Keyword Distribution',
-    highValue: 'High-Value Keywords',
+    highValue: 'High-Value Unmet Needs',
     userJourney: 'User Search Journey',
     searchIntent: 'Search Intent Analysis',
     decisionPoints: 'Decision Points',
     flowChart: 'Flow Chart',
     recommendations: 'Recommendations',
-    contentStrategy: 'Content Strategy',
-    seoRecommendations: 'SEO Recommendations',
+    contentStrategy: 'Solution Strategy',
+    seoRecommendations: 'Market Validation Suggestions',
     contentIdeas: 'Content Creation Ideas',
     implementationSteps: 'Implementation Steps',
     conclusion: 'Conclusion',
@@ -201,16 +201,16 @@ export class MarkdownReporter {
     
     if (lang === 'zh') {
       return `
-# 任务: 基于KeywordIntent分析数据生成专业SEO报告
+# 任务: 基于NeedMiner分析数据生成未满足需求报告
 
 ## 关键词
 {{keyword}}
 
 ## 你的角色
-你是一位SEO专家和内容策略顾问，擅长分析关键词数据并提供专业的、数据驱动的建议。
+你是一位需求分析专家和创业顾问，擅长发现未被满足的用户需求并提供市场验证方案。
 
 ## 任务详情
-我提供了一份KeywordIntent生成的关键词分析数据(JSON格式)和一个基础的Markdown报告结构。你需要:
+我提供了一份NeedMiner生成的需求分析数据(JSON格式)和一个基础的Markdown报告结构。你需要:
 
 1. 填充报告中所有标记为"待AI完成"的部分
 2. 让报告专业、详尽且具有洞察力
@@ -218,15 +218,15 @@ export class MarkdownReporter {
 4. 保持客观，但提供有价值的策略性见解
 
 ## 报告要求
-- 摘要部分：简明扼要地总结核心发现和价值
-- 关键发现：突出最重要的数据洞察和模式
-- 关键词分析：深入解析关键词分布、搜索意图和竞争格局
-- 用户旅程：剖析搜索行为的转变路径，解释决策点
-- 内容策略：提供具体的内容创作建议
-- SEO建议：给出明确的页面优化和结构建议
+- 摘要部分：简明扼要地总结核心发现和未满足需求的价值
+- 关键发现：突出最重要的未满足需求和市场机会
+- 关键词分析：深入解析需求背后的用户痛点和真实意图
+- 用户旅程：剖析搜索行为的转变路径，解释用户为何找不到满意解决方案
+- 内容策略：提供如何满足这些未被解决需求的建议
+- 简化解决方案：为每个未满足需求提供快速实现的解决方案
+- 冷启动MVP：详细描述如何以最小成本验证需求价值
 - 实施步骤：制定优先级和时间线
-- 结论：总结建议和预期效果
-- 未满足需求解决方案：针对每个未满足需求，提供简化方案和冷启动MVP方案
+- 结论：总结发现的需求价值和验证方案的预期效果
 
 ## 未满足需求解决方案特别要求
 如果报告中包含"未满足需求分析"部分，请特别注意：
@@ -254,16 +254,16 @@ export class MarkdownReporter {
 `;
     } else {
       return `
-# Task: Generate Professional SEO Report Based on KeywordIntent Analysis Data
+# Task: Generate Unmet Needs Report Based on NeedMiner Analysis Data
 
 ## Keyword
 {{keyword}}
 
 ## Your Role
-You are an SEO expert and content strategy consultant, skilled at analyzing keyword data and providing professional, data-driven recommendations.
+You are a demand analysis expert and startup advisor, skilled at discovering unmet user needs and providing market validation solutions.
 
 ## Task Details
-I'm providing KeywordIntent-generated keyword analysis data (JSON format) and a basic Markdown report structure. You need to:
+I'm providing NeedMiner-generated analysis data (JSON format) and a basic Markdown report structure. You need to:
 
 1. Complete all sections marked "To be completed by AI"
 2. Make the report professional, comprehensive, and insightful
@@ -271,15 +271,15 @@ I'm providing KeywordIntent-generated keyword analysis data (JSON format) and a 
 4. Remain objective while offering valuable strategic insights
 
 ## Report Requirements
-- Executive Summary: Concisely summarize core findings and value
-- Key Insights: Highlight the most important data insights and patterns
-- Keyword Analysis: Deep dive into keyword distribution, search intent, and competitive landscape
-- User Journey: Analyze search behavior transformation paths, explain decision points
-- Content Strategy: Provide specific content creation recommendations
-- SEO Recommendations: Give clear page optimization and structure suggestions
+- Executive Summary: Concisely summarize core findings and the value of unmet needs
+- Key Insights: Highlight the most important unmet needs and market opportunities
+- Keyword Analysis: Deep dive into user pain points and real intentions behind the needs
+- User Journey: Analyze search behavior paths, explain why users can't find satisfactory solutions
+- Content Strategy: Provide recommendations on how to meet these unsolved needs
+- Simplified Solutions: For each unmet need, provide quick-to-implement approaches
+- Cold-start MVP: Detail how to validate demand value at minimal cost
 - Implementation Steps: Establish priorities and timeline
-- Conclusion: Summarize recommendations and expected outcomes
-- Unmet Needs Solutions: For each unmet need, provide simplified solutions and cold-start MVP approaches
+- Conclusion: Summarize the value of discovered needs and expected outcomes of validation approaches
 
 ## Special Requirements for Unmet Needs Solutions
 If the report includes an "Unmet Needs Analysis" section, please pay special attention to:
@@ -612,7 +612,7 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
    * @returns Markdown内容
    */
   private generateContentStrategyPlaceholder(result: WorkflowResult): string {
-    return `*[待AI完成: 基于关键词分析和用户旅程，提供全面的内容策略建议，包括核心内容主题、内容类型、结构和目标受众特征等]*\n\n`;
+    return `*[待AI完成: 基于未满足需求分析，提供全面的解决方案策略，包括优先级、资源需求、技术路径和快速验证方法等]*\n\n`;
   }
 
   /**
@@ -621,7 +621,7 @@ Please maintain the Markdown format unchanged, only filling in the sections mark
    * @returns Markdown内容
    */
   private generateSEORecommendationsPlaceholder(result: WorkflowResult): string {
-    return `*[待AI完成: 提供针对发现关键词的SEO优化建议，包括页面结构、内部链接、技术优化点等]*\n\n`;
+    return `*[待AI完成: 提供针对未满足需求的市场验证建议，包括验证渠道、初期用户获取策略、竞品差异化要点等]*\n\n`;
   }
 
   /**
