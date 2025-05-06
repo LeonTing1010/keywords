@@ -1,64 +1,36 @@
 {
-  "name": "keywordintent",
-  "version": "3.3.0",
-  "main": "keywordIntent.ts",
+  "name": "startup-analysis",
+  "version": "1.0.0",
+  "description": "创业机会分析系统",
+  "main": "src/cli.ts",
   "scripts": {
-    "keywords": "ts-node keywordIntent.ts",
-    "debug": "node --inspect-brk -r ts-node/register keywordIntent.ts",
-    "debug:baidu": "node --inspect-brk -r ts-node/register keywordIntent.ts test --engine baidu",
-    "debug:google": "node --inspect-brk -r ts-node/register keywordIntent.ts test --engine google",
-    "build": "tsc",
-    "dev": "ts-node keywordIntent.ts",
-    "debug:tools": "./debug-tools.sh",
-    "debug:runner": "DEBUG=true ts-node src/tools/debug-runner.ts",
-    "debug:network": "DEBUG=true ts-node src/tools/debug-runner.ts network",
-    "check-config": "ts-node src/tools/config-check.ts",
-    "simple": "ts-node keywordIntent.ts --no-llm",
-    "analyze": "ts-node keywordIntent.ts",
-    "intent": "ts-node keywordIntent.ts --",
-    "report": "ts-node test-scripts/generate-markdown-report.ts",
+    "analyze": "ts-node src/cli.ts",
+    "debug": "node --inspect-brk -r ts-node/register src/cli.ts",
     "test": "jest",
-    "test:watch": "jest --watch",
-    "test:workflow": "ts-node src/test/workflowControllerTest.ts"
+    "build": "tsc"
   },
   "keywords": [
-    "seo",
-    "keywords",
-    "long-tail",
-    "autocomplete",
-    "search-suggestions",
-    "intent-mining",
-    "content-strategy",
-    "user-intent",
-    "search-behavior",
-    "journey-analysis"
+    "startup",
+    "analysis",
+    "opportunity",
+    "market-research",
+    "validation"
   ],
   "author": "",
   "license": "ISC",
-  "description": "KeywordIntent - 高级用户意图挖掘与搜索行为分析系统",
-  "devDependencies": {
-    "@playwright/test": "^1.52.0",
-    "@types/axios": "^0.14.0",
-    "@types/handlebars": "^4.1.0",
-    "@types/jest": "^29.5.14",
-    "@types/node": "^22.15.3",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.3.2"
-  },
   "dependencies": {
-    "@types/fs-extra": "^11.0.4",
-    "axios": "^1.6.7",
-    "chart.js": "^4.3.0",
-    "d3": "^7.8.5",
+    "@types/node": "^18.0.0",
+    "@types/node-fetch": "^2.6.12",
     "dotenv": "^16.5.0",
-    "fs-extra": "^11.3.0",
-    "handlebars": "^4.7.8",
-    "marked": "^15.0.11",
-    "openai": "^4.24.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "https-proxy-agent": "^7.0.6",
+    "node-fetch": "^2.7.0",
+    "playwright": "^1.52.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
   },
-  "bin": {
-    "keywordintent": "./keywordIntent.ts"
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0"
   }
 }

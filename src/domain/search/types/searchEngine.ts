@@ -1,4 +1,4 @@
-import { SearchOptions, AutocompleteSuggestion, SearchEngineConfig } from '../types';
+import { SearchOptions, AutocompleteSuggestion, SearchEngineConfig } from '../../../types';
 
 /**
  * 搜索引擎接口

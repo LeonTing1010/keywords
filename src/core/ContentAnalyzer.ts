@@ -45,43 +45,19 @@ export class ContentAnalyzer {
     if (this.verbose) {
       logger.debug(`分析关键词需求满足度: ${keyword}`);
     }
-    
     try {
-      // 1. 获取搜索结果（通过获取自动补全建议来模拟搜索结果）
-      const suggestions = await this.searchEngine.getSuggestions(keyword);
-      
-      // 从自动补全建议中提取相关信息，以模拟搜索结果
-      const mockSearchResults = suggestions.map((suggestion, index) => ({
-        title: suggestion.query,
-        snippet: suggestion.query,
-        url: `https://example.com/result${index + 1}`
-      })).slice(0, this.maxResultsToAnalyze);
-      
-      // 2. 准备分析数据
-      const promptData = {
-        keyword,
-        searchResults: mockSearchResults
-      };
-      
-      // 3. 调用LLM分析内容质量与需求满足度
+      // 1. 获取真实搜索结果（必须实现getSearchResults）
+      if (typeof (this.searchEngine as any).getSearchResults !== 'function') {
+        throw new Error('当前搜索引擎未实现 getSearchResults 方法');
+      }
+      const searchResults = await (this.searchEngine as any).getSearchResults(keyword, { maxResults: this.maxResultsToAnalyze });
+      // 2. 调用LLM分析内容质量与需求满足度
+      const promptData = { keyword, searchResults };
       const analysis = await this.llmService.analyze('unmet_needs_verification', promptData, {
         format: 'json',
-        systemPrompt: `分析以下关键词的搜索结果，判断这个需求是否是互联网上尚未被充分满足的高价值需求。
-评估标准:
-1. 需求真实性 - 这是否是用户真实存在的需求？
-2. 内容缺口 - 搜索结果是否有明显缺失或不满足用户搜索意图？
-3. 市场价值 - 这个未满足需求是否具有商业价值或长尾价值？
-4. 需求紧迫性 - 用户是否迫切需要解决方案？
-5. 实现难度 - 满足这个需求的解决方案实现难度如何？
-
-以JSON格式返回精简结果: {
-  "isUnmetNeed": true/false,    // 是否未被满足的高价值需求
-  "contentQuality": 0.7,        // 现有内容满足度评分 (0-1，越低表示缺口越大)
-  "reason": "简明扼要解释为什么这是高价值未满足需求或为什么不是"
-}`
+        systemPrompt: `分析以下关键词的搜索结果，判断这个需求是否是互联网上尚未被充分满足的高价值需求。\n评估标准:\n1. 需求真实性\n2. 内容缺口\n3. 市场价值\n4. 需求紧迫性\n5. 实现难度\n以JSON格式返回: {\n  "isUnmetNeed": true/false,\n  "contentQuality": 0.7,\n  "reason": "简明扼要解释"\n}`
       });
-      
-      // 4. 返回规范化的结果
+      // 3. 返回规范化的结果
       return {
         keyword,
         isUnmetNeed: analysis.isUnmetNeed === true,
@@ -89,9 +65,7 @@ export class ContentAnalyzer {
         reason: analysis.reason || "未提供详细原因"
       };
     } catch (error) {
-      logger.warn(`分析关键词"${keyword}"失败`, { error: (error as Error).message });
-      
-      // 发生错误时返回默认结果
+      logger.warn(`分析关键词\"${keyword}\"失败`, { error: (error as Error).message });
       return {
         keyword,
         isUnmetNeed: false,

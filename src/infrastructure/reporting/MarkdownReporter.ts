@@ -1,15 +1,11 @@
-/**
- * MarkdownReporter - 创业机会分析报告生成器
- */
-
 import * as fs from 'fs';
 import * as path from 'path';
-import { LLMServiceHub } from '../infrastructure/llm/LLMServiceHub';
+import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { logger } from '../core/logger';
 import {
   EnhancedWorkflowResult,
   StartupAnalysis
-} from '../types/reportTypes';
+} from '../../types/reportTypes';
 
 /**
  * 报告配置接口

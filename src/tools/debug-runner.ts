@@ -6,13 +6,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { GoogleSearchEngine } from '../providers/GoogleSearchEngine';
-import { BaiduSearchEngine } from '../providers/BaiduSearchEngine';
-import { LLMServiceHub } from '../llm/LLMServiceHub';
-import { config } from '../config';
-import { AppError, ErrorType, handleError } from '../core/errorHandler';
-import { logger } from '../core/logger';
-import { AutocompleteSuggestion } from '../journey/AutocompleteTypes';
+import { GoogleSearchEngine } from '../infrastructure/search/engines/GoogleSearchEngine';
+import { BaiduSearchEngine } from '../infrastructure/search/engines/BaiduSearchEngine';
+import { LLMServiceHub } from '../infrastructure/llm/LLMServiceHub';
+import { config } from '../infrastructure/config/config';
+import { AppError, ErrorType, handleError } from '../infrastructure/error/errorHandler';
+import { logger } from '../infrastructure/error/logger';
+import { WorkflowController } from '../application/services/WorkflowController';
 
 // 创建日志目录
 const LOG_DIR = path.join(process.cwd(), 'logs', 'debug');
@@ -51,9 +51,7 @@ async function runNetworkDiagnostics() {
     
     // 初始化引擎
     log.debug('初始化搜索引擎...');
-    await engine.initialize({
-      useSystemBrowser: false
-    });
+    await engine.initialize();
     
     // 执行一个简单查询
     log.debug('执行诊断查询...');
@@ -91,13 +89,13 @@ async function runLLMDiagnostics() {
     
     // 执行简单的提示
     log.debug('向LLM发送测试提示...');
-    const response = await llmService.analyze('test_categorization', {
-      task: '将关键词分类为三个类别',
-      categories: ['informational', 'commercial', 'educational']
-    }, {
-      systemPrompt: '你是一个专业的关键词分析师。',
-      format: 'json'
-    });
+    const response = await llmService.analyze('将关键词分类为三个类别', 
+      { keywords: ['家居', '教育', '购物'] },
+      {
+        systemPrompt: '你是一个专业的关键词分析师。',
+        format: 'json'
+      }
+    );
     
     log.debug('LLM响应成功');
     
@@ -130,18 +128,27 @@ async function runSearchEngineDiagnostics(keyword: string = 'test', engineType: 
     
     // 初始化引擎
     log.debug('初始化搜索引擎...');
-    await engine.initialize({
-      useSystemBrowser: false
-    });
+    await engine.initialize();
     
     // 执行查询
     log.debug(`执行查询: "${keyword}"...`);
     const suggestions = await engine.getSuggestions(keyword);
-    
     log.success(`查询成功! 返回${suggestions.length}个结果:`);
-    suggestions.forEach((suggestion: AutocompleteSuggestion, index: number) => {
+    suggestions.forEach((suggestion: any, index: number) => {
       log.info(`  ${index + 1}. ${suggestion.query}`);
     });
+
+    // 新增：测试 getSearchResults（仅Baidu）
+    if (engineType.toLowerCase() === 'baidu' && typeof engine.getSearchResults === 'function') {
+      log.info('测试 getSearchResults...');
+      const results = await engine.getSearchResults(keyword, { maxResults: 3 });
+      results.forEach((item, idx) => {
+        log.info(`Result #${idx + 1}:`);
+        log.info(`  标题: ${item.title}`);
+        log.info(`  摘要: ${item.snippet}`);
+        log.info(`  URL: ${item.url}`);
+      });
+    }
     
     // 关闭引擎
     await engine.close();
@@ -150,6 +157,61 @@ async function runSearchEngineDiagnostics(keyword: string = 'test', engineType: 
   } catch (error) {
     handleError(error);
     log.error(`搜索引擎诊断失败: ${(error as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * 测试工作流控制器
+ */
+async function testWorkflowController(keyword: string = 'test') {
+  log.info(`开始测试工作流控制器 (关键词: ${keyword})...`);
+  
+  try {
+    // 创建搜索引擎实例
+    const searchEngine = new BaiduSearchEngine();
+    
+    // 初始化引擎
+    log.debug('初始化搜索引擎...');
+    await searchEngine.initialize();
+    
+    // 创建LLM服务实例
+    const llmService = new LLMServiceHub({
+      model: config.llm.defaultModel
+    });
+    
+    // 创建工作流控制器
+    log.debug('创建工作流控制器...');
+    const workflowController = new WorkflowController({
+      searchEngine,
+      llmService,
+      maxIterations: 2,
+      satisfactionThreshold: 0.8,
+      analysisDepth: 1,
+      outputFormat: 'json',
+      enableJourneySim: true,
+      enableAutocomplete: true,
+      verbose: true,
+      outputDir: './output',
+      language: 'zh',
+      generateMarkdownReport: false
+    });
+    
+    // 执行工作流
+    log.debug(`执行工作流分析: "${keyword}"...`);
+    const result = await workflowController.executeWorkflow(keyword);
+    
+    log.success('工作流执行成功!');
+    log.info(`发现关键词数量: ${result.discoveredKeywords.length}`);
+    log.info(`市场洞察数量: ${result.marketInsights.length}`);
+    
+    // 关闭搜索引擎
+    await searchEngine.close();
+    
+    return true;
+  } catch (error) {
+    handleError(error);
+    log.error(`工作流控制器测试失败: ${(error as Error).message}`);
     return false;
   }
 }
@@ -207,6 +269,13 @@ async function main() {
         break;
       case 'baidu':
         await runSearchEngineDiagnostics(params[0] || 'test', 'baidu');
+        break;
+      case 'workflow':
+        if (params.length === 0) {
+          await testWorkflowController();
+        } else {
+          await testWorkflowController(params[0]);
+        }
         break;
       case 'query':
         if (params.length === 0) {

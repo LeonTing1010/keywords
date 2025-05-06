@@ -398,6 +398,102 @@ export class BaiduSearchEngine implements SearchEngine {
   }
   
   /**
+   * 获取真实百度搜索结果（标题、摘要、URL）
+   * @param keyword 搜索关键词
+   * @param options 可选参数，支持maxResults
+   * @returns 搜索结果数组
+   */
+  async getSearchResults(keyword: string, options?: { maxResults?: number }): Promise<{ title: string; snippet: string; url: string }[]> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    if (!this.page) {
+      throw new Error('浏览器页面未初始化');
+    }
+    const domain = this.customDomain || this.config.defaultDomain;
+    // 1. 访问百度首页
+    const homeUrl = `https://${domain}/`;
+    await this.page.goto(homeUrl, { waitUntil: 'domcontentloaded' });
+    await this.randomDelay(1000, 2000);
+    // 2. 处理隐私政策确认对话框
+    await this.handlePrivacyConsent(this.page);
+    // 3. 查找搜索框并输入关键词
+    const searchInput = await this.page.$('#kw, input[name="wd"], input[type="text"], #index-kw');
+    if (!searchInput) throw new Error('无法找到百度搜索框');
+    await searchInput.click();
+    await this.randomDelay(200, 400);
+    await searchInput.fill('');
+    await this.randomDelay(100, 200);
+    await searchInput.type(keyword, { delay: 80 });
+    await this.randomDelay(300, 600);
+    // 4. 模拟回车或点击"百度一下"按钮
+    const searchBtn = await this.page.$('#su, .bg.s_btn, .s_btn_wr input, button[type="submit"]');
+    if (searchBtn) {
+      await searchBtn.click();
+    } else {
+      await searchInput.press('Enter');
+    }
+    // 5. 等待搜索结果区域加载
+    await this.page.waitForSelector('#content_left', { timeout: 8000 });
+    await this.randomDelay(1200, 1800);
+    // 6. 提取结果
+    const results = await this.page.$$eval('#content_left .result, #content_left .c-container', (nodes, maxResults) => {
+      const arr: { title: string; snippet: string; url: string }[] = [];
+      for (const node of nodes.slice(0, maxResults)) {
+        const titleEl = node.querySelector('h3') || node.querySelector('.c-title');
+        // --------- 链接增强提取 ---------
+        let linkEl = null;
+        if (titleEl) linkEl = titleEl.querySelector('a');
+        if (!linkEl) linkEl = node.querySelector('.c-title a');
+        if (!linkEl) linkEl = node.querySelector('.result-op a');
+        if (!linkEl) linkEl = node.querySelector('a[data-click]');
+        if (!linkEl) linkEl = node.querySelector('a');
+        // --------- 摘要增强提取 ---------
+        let snippet = '';
+        const snippetEl = node.querySelector('.c-abstract');
+        if (snippetEl && snippetEl.textContent) {
+          snippet = snippetEl.textContent.trim();
+        }
+        if (!snippet) {
+          let maxText = '';
+          node.querySelectorAll('p,span,div').forEach(el => {
+            const txt = el.textContent?.trim() || '';
+            if (txt.length > maxText.length) maxText = txt;
+          });
+          snippet = maxText;
+        }
+        if (!snippet) {
+          let text = node.textContent || '';
+          if (titleEl && titleEl.textContent) {
+            text = text.replace(titleEl.textContent, '');
+          }
+          if (linkEl && linkEl.textContent) {
+            text = text.replace(linkEl.textContent, '');
+          }
+          snippet = text.trim();
+        }
+        // --------- 标题/链接 ---------
+        const title = titleEl ? titleEl.textContent?.trim() || '' : '';
+        let url = '';
+        if (linkEl && linkEl.getAttribute('href')) {
+          const href = linkEl.getAttribute('href') || '';
+          if (!href.startsWith('javascript')) {
+            url = href;
+          }
+        }
+        if (!url) {
+          url = '无外链/特殊结果';
+        }
+        if (title) {
+          arr.push({ title, snippet, url });
+        }
+      }
+      return arr;
+    }, options?.maxResults || 3);
+    return results;
+  }
+  
+  /**
    * 关闭搜索引擎
    */
   async close(): Promise<void> {
