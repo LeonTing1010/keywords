@@ -110,7 +110,13 @@ ${this.formatObject(opportunity.direction)}`;
 
   private formatObject(obj: any): string {
     if (Array.isArray(obj)) {
-      return obj.map(item => `- ${item}`).join('\n');
+      return obj.map(item => {
+        if (typeof item === 'object' && item !== null) {
+          return `- ${this.formatObjectInArray(item)}`;
+        } else {
+          return `- ${item}`;
+        }
+      }).join('\n');
     }
 
     if (typeof obj === 'object' && obj !== null) {
@@ -125,5 +131,36 @@ ${this.formatObject(opportunity.direction)}`;
     }
 
     return String(obj);
+  }
+
+  /**
+   * 格式化数组中的对象
+   * 专门用于处理数组中的对象，避免显示 [object Object]
+   */
+  private formatObjectInArray(obj: any): string {
+    if (typeof obj !== 'object' || obj === null) {
+      return String(obj);
+    }
+
+    return Object.entries(obj)
+      .map(([key, value]) => {
+        const formattedKey = key.replace(/([A-Z])/g, ' $1')
+          .toLowerCase()
+          .replace(/^./, str => str.toUpperCase());
+
+        let formattedValue;
+        if (Array.isArray(value)) {
+          formattedValue = value.join(', ');
+        } else if (typeof value === 'object' && value !== null) {
+          formattedValue = Object.entries(value)
+            .map(([k, v]) => `${k}: ${String(v)}`)
+            .join(', ');
+        } else {
+          formattedValue = String(value);
+        }
+
+        return `${formattedKey}: ${formattedValue}`;
+      })
+      .join('; ');
   }
 } 

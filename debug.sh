@@ -63,7 +63,7 @@ fi
 echo -e "${GREEN}使用 node 运行 StartupAnalysis...${NC}\n"
 
 # 使用 node 直接运行，使用 ts-node/register 钩子
-node -r ts-node/register src/cli.ts "$@" 2>&1 | tee "$LOG_FILE"
+node -r ts-node/register src/presentation/cli/Cli.ts "$@" 2>&1 | tee "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
 

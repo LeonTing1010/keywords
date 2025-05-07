@@ -13,6 +13,7 @@ interface AnalyzerConfig {
 
 export class StartupAnalyzer {
   private llm: LLMServiceHub;
+  private jsonLlm: LLMServiceHub; // JSON强制LLM服务
   private config: AnalyzerConfig = {
     model: 'gpt-4',
     temperature: 0.7,
@@ -22,6 +23,8 @@ export class StartupAnalyzer {
 
   constructor() {
     this.llm = new LLMServiceHub();
+    // 创建一个专用于JSON响应的LLM服务
+    this.jsonLlm = new LLMServiceHub();
   }
 
   /**
@@ -31,7 +34,9 @@ export class StartupAnalyzer {
     this.config = { ...this.config, ...config };
     this.llm = new LLMServiceHub({
       model: this.config.model,
-      verbose: this.config.verbose
+    });
+    this.jsonLlm = new LLMServiceHub({
+      model: this.config.model,
     });
   }
 
@@ -85,15 +90,54 @@ export class StartupAnalyzer {
     Data:
     ${JSON.stringify(result)}`;
 
-    const [timingAnalysis, directionAnalysis] = await Promise.all([
-      this.llm.analyze(timingPrompt, 'timing_analysis', { temperature: this.config.temperature }),
-      this.llm.analyze(directionPrompt, 'trend_analysis', { temperature: this.config.temperature })
-    ]);
+    let timing, direction;
+
+    try {
+      const timingAnalysis = await this.jsonLlm.analyze(timingPrompt, 'timing_analysis', { 
+        temperature: this.config.temperature, 
+        format: 'json',
+        strictFormat: true
+      });
+      
+      timing = typeof timingAnalysis === 'string' ? JSON.parse(timingAnalysis) : timingAnalysis;
+    } catch (error) {
+      console.log('获取timing分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      timing = {
+        status: "Unknown",
+        windowSize: "Unknown",
+        urgencyLevel: "medium",
+        rationale: "Unable to analyze market timing due to API error. Please try again later.",
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+    
+    try {
+      const directionAnalysis = await this.jsonLlm.analyze(directionPrompt, 'trend_analysis', { 
+        temperature: this.config.temperature, 
+        format: 'json',
+        strictFormat: true
+      });
+      
+      direction = typeof directionAnalysis === 'string' ? JSON.parse(directionAnalysis) : directionAnalysis;
+    } catch (error) {
+      console.log('获取direction分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      direction = {
+        trends: ["Unable to analyze market trends due to API error"],
+        drivingFactors: ["Please try again later"],
+        evidence: ["Error occurred during analysis"],
+        confidenceLevel: 0,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
 
     return {
       domain,
-      timing: JSON.parse(timingAnalysis),
-      direction: JSON.parse(directionAnalysis)
+      timing,
+      direction
     };
   }
 
@@ -111,7 +155,28 @@ export class StartupAnalyzer {
     Context:
     ${JSON.stringify(result)}`;
 
-    return JSON.parse(await this.llm.analyze(prompt, 'strategy_analysis', { temperature: this.config.temperature }));
+    try {
+      const strategyAnalysis = await this.jsonLlm.analyze(prompt, 'strategy_analysis', { 
+        temperature: this.config.temperature,
+        format: 'json',
+        strictFormat: true
+      });
+      
+      return typeof strategyAnalysis === 'string' ? JSON.parse(strategyAnalysis) : strategyAnalysis;
+    } catch (error) {
+      console.log('获取strategy分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      return {
+        entryPoint: "Unable to analyze due to API error",
+        approach: "Please try again later",
+        competitiveAdvantages: ["Analysis error occurred"],
+        challenges: ["Unable to identify challenges due to API error"],
+        differentiators: ["Error analyzing differentiators"],
+        timingRecommendations: ["Please retry the analysis"],
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   /**
@@ -127,7 +192,33 @@ export class StartupAnalyzer {
     Context:
     ${JSON.stringify(result)}`;
 
-    return JSON.parse(await this.llm.analyze(prompt, 'risk_analysis', { temperature: this.config.temperature }));
+    try {
+      const riskAnalysis = await this.jsonLlm.analyze(prompt, 'risk_analysis', { 
+        temperature: this.config.temperature,
+        format: 'json',
+        strictFormat: true
+      });
+      
+      return typeof riskAnalysis === 'string' ? JSON.parse(riskAnalysis) : riskAnalysis;
+    } catch (error) {
+      console.log('获取risks分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      return {
+        immediate: [{
+          description: "Unable to analyze immediate risks due to API error",
+          severity: "medium" as 'high' | 'medium' | 'low',
+          mitigation: "Please try again later"
+        }],
+        strategic: [{
+          description: "Unable to analyze strategic risks due to API error",
+          impact: "unknown",
+          timeframe: "unknown",
+          mitigation: "Please retry the analysis"
+        }],
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   /**
@@ -143,7 +234,33 @@ export class StartupAnalyzer {
     Context:
     ${JSON.stringify(result)}`;
 
-    return JSON.parse(await this.llm.analyze(prompt, 'resource_planning', { temperature: this.config.temperature }));
+    try {
+      const resourcePlanning = await this.jsonLlm.analyze(prompt, 'resource_planning', { 
+        temperature: this.config.temperature,
+        format: 'json',
+        strictFormat: true
+      });
+      
+      return typeof resourcePlanning === 'string' ? JSON.parse(resourcePlanning) : resourcePlanning;
+    } catch (error) {
+      console.log('获取resources分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      return {
+        immediate: [{
+          type: "Error",
+          description: "Unable to analyze resource needs due to API error",
+          priority: "medium" as 'high' | 'medium' | 'low'
+        }],
+        scaling: [{
+          trigger: "Unknown",
+          requirements: ["Please try again later"],
+          timeline: "Error in analysis"
+        }],
+        alternatives: ["Unable to provide alternatives due to analysis error"],
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   /**
@@ -159,6 +276,33 @@ export class StartupAnalyzer {
     Context:
     ${JSON.stringify(result)}`;
 
-    return JSON.parse(await this.llm.analyze(prompt, 'validation_planning', { temperature: this.config.temperature }));
+    try {
+      const validationPlanning = await this.jsonLlm.analyze(prompt, 'validation_planning', { 
+        temperature: this.config.temperature,
+        format: 'json',
+        strictFormat: true
+      });
+      
+      return typeof validationPlanning === 'string' ? JSON.parse(validationPlanning) : validationPlanning;
+    } catch (error) {
+      console.log('获取validation分析失败，创建兜底内容', { error });
+      
+      // 创建兜底内容
+      return {
+        hypotheses: [{
+          statement: "Unable to generate hypotheses due to API error",
+          priority: "medium" as 'high' | 'medium' | 'low'
+        }],
+        methods: [{
+          name: "Error in analysis",
+          description: "Unable to propose validation methods due to API error",
+          metrics: ["Please try again later"],
+          thresholds: ["Error occurred during analysis"]
+        }],
+        nextSteps: ["Retry the analysis"],
+        priorities: ["Unable to determine priorities due to API error"],
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 }

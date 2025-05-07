@@ -4,13 +4,14 @@
  * 创业机会分析系统命令行工具
  * v1.0.0
  */
-import { WorkflowController } from './application/services/WorkflowController';
-import { LLMServiceHub } from './infrastructure/llm/LLMServiceHub';
-import { BaiduSearchEngine } from './infrastructure/search/engines/BaiduSearchEngine';
-import { logger } from './infrastructure/error/logger';
-import { EnhancedWorkflowResult, MarketInsight, ValidationResult } from './domain/analysis/types/AnalysisTypes';
+import { WorkflowController } from '../../application/services/WorkflowController';
+import { LLMServiceHub } from '../../infrastructure/llm/LLMServiceHub';
+import { BaiduSearchEngine } from '../../infrastructure/search/engines/BaiduSearchEngine';
+import { logger } from '../../infrastructure/core/logger';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { StartupAnalysisService } from '../../application/services/StartupAnalysisService';
+import { KeywordReportService } from '../../application/services/KeywordReportService';
 
 // 优先加载.env.local文件
 dotenv.config({ 
@@ -25,17 +26,22 @@ interface CliOptions {
   verbose: boolean;
   proxy?: string;
   output?: string;
+  preserveKeywords?: boolean;
 }
 
 function parseArguments(): { keyword: string; options: CliOptions } {
   const args = process.argv.slice(2);
   const options: CliOptions = {
-    engine: 'baidu',
-    format: 'json',
-    language: 'zh',
-    verbose: false
+    engine: (process.env.SEARCH_ENGINE as 'baidu' | 'google') || 'baidu',
+    format: (process.env.OUTPUT_FORMAT as 'json' | 'markdown') || 'json',
+    language: (process.env.LANGUAGE as 'zh' | 'en') || 'zh',
+    verbose: false,
+    preserveKeywords: process.env.PRESERVE_KEYWORDS === 'true'
   };
   
+  // 调试输出环境变量
+  console.log(`解析参数: OUTPUT_FORMAT=${process.env.OUTPUT_FORMAT}, 使用format=${options.format}`);
+
   let keyword = '';
 
   for (let i = 0; i < args.length; i++) {
@@ -60,6 +66,9 @@ function parseArguments(): { keyword: string; options: CliOptions } {
           break;
         case '--output':
           options.output = args[++i];
+          break;
+        case '--preserve-keywords':
+          options.preserveKeywords = true;
           break;
       }
     } else if (!keyword) {
@@ -122,22 +131,44 @@ async function main() {
       verbose: options.verbose,
       outputDir: './output',
       language: options.language,
-      generateMarkdownReport: options.format === 'markdown'
     });
+    const startupService = new StartupAnalysisService()
 
     // 执行分析工作流
     const result = await workflowController.executeWorkflow(keyword);
 
     // 保存结果
-    const outputPath = options.output || `./output/analysis_${Date.now()}.${options.format}`;
-    const outputContent = options.format === 'json' 
-      ? JSON.stringify(result, null, 2)
-      : generateMarkdownReport(result);
-
-    await saveOutput(outputPath, outputContent);
-
-    logger.info('分析完成', { outputPath });
-    process.exit(0);
+    const formattedDate = new Date().toISOString().replace(/[-:T]/g, '_').substring(0, 16);
+    const safeKeyword = keyword.replace(/[^\w\u4e00-\u9fa5]/g, '_').substring(0, 30);
+    const uniqueId = Math.random().toString(36).substring(2, 6);
+    const reportFileName = `AIKR_${safeKeyword}_${formattedDate}_${uniqueId}.${options.format}`;
+    const outputPath = options.output || `./output/${reportFileName}`;
+    let outputContent: string;
+    
+    // 根据输出格式处理内容
+    logger.info(`使用输出格式: ${options.format}`);
+    if (options.format === 'json') {
+      outputContent = JSON.stringify(result, null, 2);
+      await saveOutput(outputPath, outputContent);
+      logger.info('分析完成', { outputPath });
+      process.exit(0);
+    } else {
+      // 使用KeywordReportService生成markdown报告
+      const keywordReportService = new KeywordReportService();
+      const reportResult = await keywordReportService.generateKeywordReport(result, {
+        format: options.format,
+        language: options.language,
+        engine: options.engine,
+        model: llmService.getModelName(),
+        temperature: 0.7,
+        verbose: options.verbose,
+        preserveKeywords: options.preserveKeywords ? [keyword] : [],
+        outputDir: path.dirname(outputPath)
+      });
+      
+      logger.info('分析完成', { reportPath: reportResult.reportPath });
+      process.exit(0);
+    }
 
   } catch (error) {
     logger.error('系统执行出错', { error });
@@ -157,43 +188,6 @@ async function saveOutput(path: string, content: string): Promise<void> {
     logger.error('保存输出失败', { error });
     throw error;
   }
-}
-
-function generateMarkdownReport(result: EnhancedWorkflowResult): string {
-  return `# 关键词分析报告
-
-## 基本信息
-- 关键词: ${result.keyword}
-- 生成时间: ${result.generatedAt}
-- 版本: ${result.version}
-
-## 发现的关键词
-${result.discoveredKeywords.map((kw: string) => `- ${kw}`).join('\n')}
-
-## 用户旅程分析
-${result.userJourneys.map((journey: any) => `
-### 旅程 ${journey.startKeyword}
-${journey.steps.map((step: any) => `- ${step.query} (满意度: ${step.satisfaction})`).join('\n')}
-`).join('\n')}
-
-## 市场洞察
-${result.marketInsights.map((insight: MarketInsight) => `
-### ${insight.type}
-${insight.description}
-- 置信度: ${insight.confidence}
-- 趋势: ${insight.trend}
-- 影响: ${insight.impact}
-`).join('\n')}
-
-## 验证结果
-${result.validationResults.map((validation: ValidationResult) => `
-### ${validation.hypothesis}
-- 验证状态: ${validation.isValidated ? '已验证' : '未验证'}
-- 置信度: ${validation.confidence}
-- 方法: ${validation.method}
-- 结果: ${validation.result}
-`).join('\n')}
-`;
 }
 
 // 执行主函数

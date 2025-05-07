@@ -5,7 +5,7 @@
  */
 import { LLMServiceHub } from '../../infrastructure/llm/LLMServiceHub';
 import { SearchEngine } from '../../infrastructure/search/engines/SearchEngine';
-import { logger } from '../../infrastructure/error/logger';
+import { logger } from '../../infrastructure/core/logger';
 import {
   UserJourney,
   JourneyStep,
@@ -188,7 +188,8 @@ export class UserJourneySim {
       .slice(0, 3)
       .map(insight => insight.description);
     
-    const prompt = `分析以下搜索查询和自动补全建议，并考虑相关市场洞察:
+    const prompt = `分析以下搜索查询和自动补全建议，并结合市场洞察深入理解用户行为模式:
+
 查询: ${query}
 自动补全建议:
 ${suggestions.join('\n')}
@@ -196,11 +197,19 @@ ${suggestions.join('\n')}
 市场洞察:
 ${relevantInsights.join('\n')}
 
-请分析:
-1. 用户查询意图
-2. 建议满意度(0-1)
-3. 可能的下一步查询
-4. 查询与市场洞察的关联度`;
+请生成一个JSON对象，包含以下精确分析:
+{
+  "intent": "用户的具体查询意图，详细描述用户真实目标、背后需求与痛点",
+  "satisfaction": 0.0-1.0之间的数值，精确评估用户对建议的满意程度,
+  "nextQueries": ["可能的下一步查询1", "可能的下一步查询2", "可能的下一步查询3"],
+  "insightRelevance": 0.0-1.0之间的数值，量化查询与市场洞察的关联度与价值
+}
+
+分析要求:
+- intent需基于查询和建议进行深度分析，挖掘用户真实需求背后的动机
+- satisfaction评分需考虑建议与意图的匹配度、多样性、深度和相关性
+- nextQueries必须是高度相关且符合用户认知流程的后续查询路径，确保逻辑性和连贯性
+- insightRelevance需评估市场洞察与用户意图的实际关联价值`;
 
     const result = await this.llm.analyze(prompt, 'search_step_with_insights', {
       format: 'json',
@@ -222,15 +231,27 @@ ${relevantInsights.join('\n')}
     query: string,
     suggestions: string[]
   ): Promise<JourneyStep> {
-    const prompt = `分析以下搜索查询和自动补全建议:
+    const prompt = `分析以下搜索查询和自动补全建议，通过深度思考生成全面的行为洞察:
+
 查询: ${query}
 自动补全建议:
 ${suggestions.join('\n')}
 
-请分析:
-1. 用户查询意图
-2. 建议满意度(0-1)
-3. 可能的下一步查询`;
+请提供以下JSON格式的深入分析结果:
+{
+  "intent": "用户的具体查询意图，深入分析背后目标、需求层次和可能的情境",
+  "satisfaction": 0.0-1.0之间的数值，精确评估搜索建议的匹配度和有效性,
+  "nextQueries": ["可能的下一步查询1", "可能的下一步查询2", "可能的下一步查询3"]
+}
+
+分析要求:
+- intent分析必须挖掘查询背后的真实用户需求，考虑可能的使用场景和目标
+- satisfaction评分标准：
+  * 0.0-0.3：建议与意图几乎无关，无法满足需求
+  * 0.4-0.6：建议部分相关，但缺乏深度或全面性
+  * 0.7-0.9：建议高度相关，能满足大部分需求
+  * 1.0：建议完全匹配意图，覆盖全面且深入
+- nextQueries需要遵循用户认知发展的自然路径，确保每个后续查询都是对当前查询的合理发展`;
 
     const result = await this.llm.analyze(prompt, 'search_step_analysis', {
       format: 'json',
@@ -250,7 +271,8 @@ ${suggestions.join('\n')}
    * 核心职责：找到用户搜索过程中的痛点
    */
   private async identifyPainPoints(journey: EnhancedUserJourney): Promise<PainPoint[]> {
-    const prompt = `分析以下用户搜索旅程，识别用户痛点:
+    const prompt = `系统性分析以下用户搜索旅程，识别核心痛点并构建解决方案:
+
 起始关键词: ${journey.startKeyword}
 搜索步骤:
 ${journey.steps.map((step, index) => 
@@ -262,11 +284,27 @@ ${journey.decisionPoints.map((point, index) =>
   `决策${index+1}: 从 "${point.query}" 到 "${point.chosenOption}"\n原因: ${point.reason}`
 ).join('\n')}
 
-请识别:
-1. 主要痛点
-2. 痛点严重程度(1-5)
-3. 受影响步骤编号
-4. 可能的解决方案`;
+请返回以下JSON格式的系统化痛点分析:
+{
+  "painPoints": [
+    {
+      "description": "痛点的详细描述，阐明问题本质和根本原因",
+      "severity": 1-5的整数,
+      "affectedSteps": [受影响的步骤编号数组],
+      "possibleSolutions": [
+        "解决方案1 - 详细说明",
+        "解决方案2 - 详细说明"
+      ]
+    }
+  ]
+}
+
+分析要求:
+- 深入挖掘：不要仅关注表面现象，而要分析导致用户困惑或不满的根本原因
+- 全面评估：考虑用户旅程中的转折点、倒退行为和重复尝试等
+- 分类痛点：区分导航问题、信息不足、结果无关性等不同类型的痛点
+- 解决方案：提供具体、可操作且基于数据的解决方案，而非泛泛而谈的建议
+- 痛点评分考量：频率、对用户体验的影响程度、解决难度和业务价值`;
 
     const result = await this.llm.analyze(prompt, 'pain_points_analysis', {
       format: 'json',
@@ -289,7 +327,8 @@ ${journey.decisionPoints.map((point, index) =>
       ? `市场洞察:\n${marketInsights.map(i => i.description).join('\n')}`
       : '';
     
-    const prompt = `分析以下用户搜索旅程和旅程洞察，识别内容机会:
+    const prompt = `系统性分析以下用户搜索旅程和市场洞察，识别高价值内容机会:
+
 起始关键词: ${journey.startKeyword}
 搜索步骤:
 ${journey.steps.map((step, index) => 
@@ -301,11 +340,28 @@ ${journey.insights.map(insight => insight.description).join('\n')}
 
 ${insightsText}
 
-请识别:
-1. 内容机会点
-2. 机会潜力(1-5)
-3. 与主题相关度(0-1)
-4. 实施建议`;
+请返回以下JSON格式的战略性机会分析:
+{
+  "opportunities": [
+    {
+      "description": "机会的深入描述，包括市场空白点和用户未满足需求",
+      "potential": 1-5的整数,
+      "relevance": 0-1之间的浮点数,
+      "implementationIdeas": [
+        "实施方案1 - 详细说明",
+        "实施方案2 - 详细说明"
+      ]
+    }
+  ]
+}
+
+分析要求:
+- 机会识别：基于用户旅程断点、满意度低的步骤、决策犹豫点等识别机会
+- 市场验证：所识别机会必须与市场洞察相互印证，避免主观臆测
+- 机会评估：
+  * potential评分：综合市场规模、增长潜力、竞争状况、实现难度等因素
+  * relevance评分：基于与核心用户需求的契合度、与业务目标的一致性等
+- 实施方案：必须具体、可行、有创新性，并能直接解决用户痛点`;
 
     const result = await this.llm.analyze(prompt, 'opportunity_analysis', {
       format: 'json',
@@ -351,33 +407,40 @@ ${insightsText}
     currentQuery: string,
     options: string[]
   ): Promise<DecisionPoint> {
-    const prompt = `基于当前查询"${currentQuery}"，从以下选项中选择最可能的下一步查询:
-${options.join('\n')}
+    const prompt = `分析当前搜索查询"${currentQuery}"，从以下选项中选择最合适的下一步查询:
 
-请考虑:
-1. 查询的相关性
-2. 信息获取进展
-3. 用户可能的思维路径`;
+选项列表:
+${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
+
+请严格按照以下JSON格式返回结果:
+{
+  "query": "${currentQuery}",
+  "options": ${JSON.stringify(options)},
+  "chosenOption": "必须从选项列表中选择一个选项",
+  "reason": "详细说明选择理由，包括: 1)与当前主题的相关性 2)信息获取的进展和深度 3)用户可能的思维路径和意图"
+}
+
+注意:
+- chosenOption必须完全匹配选项列表中的某个选项
+- reason必须包含上述三个方面的分析
+- 不要返回任何其他字段或格式`;
 
     const result = await this.llm.analyze(prompt, 'decision_making', {
       format: 'json',
       temperature: 0.5
     });
 
-    return {
-      query: currentQuery,
-      options,
-      chosenOption: result.chosenOption,
-      reason: result.reason
-    };
+    return result as DecisionPoint;
   }
 
   /**
    * 生成旅程洞察
    */
   private async generateInsights(journey: UserJourney): Promise<JourneyInsight[]> {
-    const prompt = `分析以下用户搜索旅程:
+    const prompt = `分析以下用户搜索旅程并生成结构化的洞察:
+
 起始关键词: ${journey.startKeyword}
+
 搜索步骤:
 ${journey.steps.map(step => 
   `- 查询: ${step.query}
@@ -391,16 +454,40 @@ ${journey.decisionPoints.map(point =>
    原因: ${point.reason}`
 ).join('\n')}
 
-请提供:
-1. 用户行为模式
-2. 关键决策点分析
-3. 潜在的内容机会`;
+请严格按照以下JSON格式返回结果:
+{
+  "insights": [
+    {
+      "type": "行为模式|决策分析|内容机会",
+      "title": "洞察标题",
+      "description": "详细描述",
+      "confidence": 0.0-1.0,
+      "evidence": ["支持证据1", "支持证据2"],
+      "implications": ["潜在影响1", "潜在影响2"]
+    }
+  ]
+}
+
+注意:
+- type: 必须是"行为模式/决策分析/内容机会"之一
+- title: 简短的洞察标题
+- description: 详细的洞察描述
+- confidence: 必须是0-1之间的浮点数
+- evidence: 支持该洞察的证据数组
+- implications: 潜在影响和建议数组
+- 确保返回的JSON格式完全符合上述结构`;
 
     const result = await this.llm.analyze(prompt, 'journey_insights', {
       format: 'json',
       temperature: 0.5
     });
 
-    return result?.insights || [];
+    // 添加防御性检查
+    if (!result || !Array.isArray(result.insights)) {
+      logger.warn('旅程洞察生成失败，返回空数组', { journey: journey.startKeyword });
+      return [];
+    }
+
+    return result.insights;
   }
 } 

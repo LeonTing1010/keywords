@@ -8,8 +8,8 @@ import {
   AutocompleteSuggestion, 
   SearchEngineConfig 
 } from '../types';
-import { ErrorType, AppError } from '../../core/errorHandler';
-import { logger } from '../../error/logger';
+import { ErrorType, AppError } from '../../core/ErrorHandler';
+import { logger } from '../../core/logger';
 import * as playwright from 'playwright';
 import * as path from 'path';
 import * as fs from 'fs';

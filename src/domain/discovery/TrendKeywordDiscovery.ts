@@ -1,6 +1,6 @@
 import { LLMServiceHub } from '../../infrastructure/llm/LLMServiceHub';
 import { SearchEngine } from '../../infrastructure/search/engines/SearchEngine';
-import { logger } from '../../infrastructure/error/logger';
+import { logger } from '../../infrastructure/core/logger';
 import { AutocompleteSuggestion } from '../../infrastructure/search/types';
 import { MarketInsight } from '../analysis/types/AnalysisTypes';
 
@@ -192,7 +192,8 @@ export class TrendKeywordDiscovery {
         .map((result, index) => `${index + 1}. ${result.query}`)
         .join('\n');
 
-      const trendPrompt = `分析以下主关键词和自动补全建议，识别趋势关键词和市场方向:
+      const trendPrompt = `作为趋势分析专家，对以下主关键词和自动补全建议进行深度分析，识别市场趋势和方向:
+
 主关键词: "${mainKeyword}"
 
 自动补全建议及其排名:
@@ -201,28 +202,55 @@ ${rankData}
 相关关键词:
 ${keywords.slice(0, 20).join('\n')}
 
-请深入分析:
-1. 识别正在上升的趋势关键词（基于位置、修饰词和意图）
-2. 发现新兴话题和用户关注点
-3. 总结市场整体发展方向
-4. 提取关键词中隐含的增长模式
+请进行系统化分析并严格按照以下JSON格式返回:
+{
+  "trendingKeywords": [
+    {
+      "keyword": "趋势关键词",
+      "confidence": 0-1之间的浮点数,
+      "reason": "基于数据的趋势判断理由，包含具体的市场信号和用户行为变化",
+      "growthStage": "emerging/rising/peaking/stable"
+    }
+  ],
+  "growthPatterns": [
+    {
+      "pattern": "增长模式的精确描述，捕捉用户行为或市场变化模式",
+      "evidence": ["具体数据点1", "具体数据点2", "搜索行为特征"],
+      "impact": "high/medium/low",
+      "implication": "这一模式对内容创作者或企业的战略意义"
+    }
+  ],
+  "emergingTopics": [
+    {
+      "topic": "新兴话题的具体表述",
+      "relevance": 0-1之间的浮点数,
+      "potential": "high/medium/low",
+      "timeframe": "immediate/short-term/long-term",
+      "audienceSegment": "目标受众群体"
+    }
+  ],
+  "directionSummary": "基于数据和趋势分析的市场整体发展方向总结，包含具体的行动指导"
+}
 
-分析时考虑:
-- 自动补全排名位置（靠前的可能是当前趋势）
-- 修饰词特征（"最新"、"2024"等时间性词语可能代表趋势）
-- 查询意图转变（从信息到交易的转变可能代表市场成熟）
-- 词语组合新模式`;
+分析要求:
+1. 准确识别：从数据中识别真实趋势而非噪音，运用关键词排名、共现频率、搜索意图等进行判断
+2. 深入挖掘：分析关键词背后的用户需求变化和市场动态，而非停留在表面现象
+3. 多维分析：考虑搜索量变化、用户群体迁移、垂直领域发展等多角度因素
+4. 趋势预测：基于现有数据预测发展趋势，并提供具体依据
+5. 实用洞察：确保每个发现都有具体的应用价值和行动指导意义`;
 
       const result = await this.llm.analyze(trendPrompt, 'trend_keyword_analysis', {
         format: 'json',
-        temperature: 0.4
+        temperature: 0.4,
+        maxRetries: 3,
+        retryDelay: 1000
       });
 
       // 确保返回有效结果
       return {
-        trendingKeywords: result?.trendingKeywords || [],
-        growthPatterns: result?.growthPatterns || [],
-        emergingTopics: result?.emergingTopics || [],
+        trendingKeywords: result?.trendingKeywords?.map((k: { keyword: string }) => k.keyword) || [],
+        growthPatterns: result?.growthPatterns?.map((p: { pattern: string }) => p.pattern) || [],
+        emergingTopics: result?.emergingTopics?.map((t: { topic: string }) => t.topic) || [],
         directionSummary: result?.directionSummary || "无法确定市场方向"
       };
     } catch (error) {
@@ -249,24 +277,51 @@ ${keywords.slice(0, 20).join('\n')}
     try {
       logger.debug('开始主题精细化关键词', { mainKeyword, themes });
       
-      const themePrompt = `基于主关键词 "${mainKeyword}" 和以下主题，生成更多相关的趋势关键词：
-主题：
+      const themePrompt = `作为趋势发现专家，基于主关键词 "${mainKeyword}" 和以下市场主题，生成具有战略价值的趋势关键词:
+
+市场主题:
 ${themes.join('\n')}
 
-请生成可能是趋势方向的关键词，考虑：
-1. 趋势相关性和增长潜力
-2. 搜索意图匹配
-3. 市场趋势契合度
-4. 避免提供这些已知关键词:
-${excludeKeywords.join('\n')}`;
+关键词生成要求:
+1. 识别与主题相关的高潜力趋势关键词
+2. 挖掘隐藏在主题背后的搜索意图层次和需求变化
+3. 关注用户行为模式转变带来的新兴搜索需求
+4. 预测搜索意图的未来发展方向
+
+需要排除的已知关键词:
+${excludeKeywords.join('\n')}
+
+请返回以下JSON格式结果:
+{
+  "keywords": [
+    {
+      "keyword": "趋势关键词",
+      "intent": "该关键词背后的主要搜索意图",
+      "trendSignal": "表明该词具有趋势特性的市场信号",
+      "audience": "目标受众群体"
+    }
+  ]
+}
+
+分析标准:
+- 趋势相关性评估：关键词必须体现明确的趋势信号或增长潜力
+- 差异化价值：关键词应当填补现有市场内容空白或需求缺口
+- 商业潜力：关键词应当具有明确的变现路径或业务价值
+- 搜索意图完整性：关键词应当能满足完整的用户搜索旅程需求
+- 受众定位准确性：关键词应当能精准定位特定用户群体的需求`;
 
       const result = await this.llm.analyze(themePrompt, 'theme_based_discovery', {
         format: 'json',
         temperature: 0.5
       });
 
-      const refinedKeywords = result?.keywords || [];
-      return refinedKeywords.slice(0, maxKeywords);
+      // 验证返回结果的结构
+      if (!result || !Array.isArray(result.keywords)) {
+        logger.warn('主题精细化关键词返回结果格式无效', { result });
+        return [];
+      }
+
+      return result.keywords.slice(0, maxKeywords);
     } catch (error) {
       logger.warn('主题精细化关键词失败', { error });
       return [];
@@ -284,20 +339,8 @@ ${excludeKeywords.join('\n')}`;
     trendAnalysis: TrendAnalysisResult
   ): Promise<MarketInsight[]> {
     try {
-      // 增强市场方向分析，结合趋势关键词分析结果
-      const trendingKeywordsText = trendAnalysis.trendingKeywords.length > 0
-        ? `趋势关键词:\n${trendAnalysis.trendingKeywords.join('\n')}`
-        : '';
-        
-      const emergingTopicsText = trendAnalysis.emergingTopics.length > 0
-        ? `新兴话题:\n${trendAnalysis.emergingTopics.join('\n')}`
-        : '';
-        
-      const growthPatternsText = trendAnalysis.growthPatterns.length > 0
-        ? `增长模式:\n${trendAnalysis.growthPatterns.join('\n')}`
-        : '';
+      const directionsPrompt = `作为市场战略顾问，基于以下多维数据，进行系统化的市场趋势分析:
 
-      const directionsPrompt = `基于以下数据，深入分析市场趋势和大方向：
 主关键词: "${mainKeyword}"
 
 相关关键词:
@@ -306,28 +349,51 @@ ${relatedKeywords.slice(0, 15).join('\n')}
 关键词模式洞察:
 ${patternInsights.join('\n')}
 
-${trendingKeywordsText}
+趋势关键词:
+${trendAnalysis.trendingKeywords.join('\n')}
 
-${emergingTopicsText}
+新兴话题:
+${trendAnalysis.emergingTopics.join('\n')}
 
-${growthPatternsText}
+增长模式:
+${trendAnalysis.growthPatterns.join('\n')}
 
 市场方向概要:
 ${trendAnalysis.directionSummary}
 
-请提供全面的市场分析:
-1. 主要市场趋势及其强度
-2. 用户关注的大方向变化
-3. 潜在的市场机会及其时机
-4. 关键词背后的用户意图演变
-5. 市场成熟度和竞争状况评估`;
+请提供战略级市场洞察，返回以下JSON格式:
+{
+  "marketInsights": [
+    {
+      "type": "trend|direction|opportunity|intent|maturity",
+      "description": "具体、可执行的洞察描述，包含战略意义和应用价值",
+      "confidence": 0.0-1.0,
+      "trend": "rising|stable|declining|defining",
+      "impact": "high|medium|low",
+      "timeHorizon": "immediate|short-term|mid-term|long-term",
+      "competitiveAdvantage": "具体的竞争优势描述",
+      "actionableStrategy": "基于此洞察的具体行动建议"
+    }
+  ],
+  "marketMaturityAssessment": {
+    "stage": "nascent|growth|mature|saturated|declining",
+    "evidence": ["支持判断的证据1", "支持判断的证据2"],
+    "opportunityWindow": "开放|即将关闭|高度竞争"
+  }
+}
+
+分析框架与方法:
+1. PESTLE分析：考虑政治、经济、社会、技术、法律和环境因素对市场的影响
+2. 需求层次分析：应用马斯洛需求层次理论分析用户搜索背后的动机变化
+3. 技术采用生命周期：评估市场在技术采用曲线中的位置(创新者/早期采用者/早期大众/晚期大众/落后者)
+4. 价值创新：识别价值曲线中的差异化机会和蓝海战略可能性
+5. 竞争分析：评估市场竞争格局、进入壁垒和差异化空间`;
 
       const result = await this.llm.analyze(directionsPrompt, 'enhanced_market_direction_analysis', {
         format: 'json',
-        temperature: 0.4
+        temperature: 0.4,
       });
 
-      // 提取并格式化市场洞察，增加洞察类型多样性
       const insights = (result?.marketInsights || []).map((insight: any) => ({
         type: insight.type || 'trend',
         description: insight.description,
@@ -365,23 +431,36 @@ ${trendAnalysis.directionSummary}
     categories: Record<string, string[]>;
   }> {
     const prompt = `分析以下关键词组合，识别可能的趋势关键词:
+
 主关键词: ${mainKeyword}
 相关关键词:
 ${relatedKeywords.join('\n')}
 
-请:
-1. 筛选出相关性高的关键词
-2. 对关键词进行分类
-3. 优先保留可能是趋势的关键词`;
+请返回以下JSON格式的分析结果:
+{
+  "relevantKeywords": ["关键词1", "关键词2", ...],
+  "categories": {
+    "分类1": ["关键词1", "关键词2", ...],
+    "分类2": ["关键词3", "关键词4", ...]
+  }
+}
+
+注意:
+- keywords: 筛选出的相关性高的关键词数组
+- categories: 关键词分类对象，key为分类名称，value为该分类下的关键词数组
+- 优先保留可能是趋势的关键词
+- 确保返回的JSON格式完全符合上述结构`;
 
     const result = await this.llm.analyze(prompt, 'keyword_analysis', {
       format: 'json',
-      temperature: 0.3
+      temperature: 0.3,
+      maxRetries: 3,
+      retryDelay: 1000
     });
 
     return {
-      keywords: result.relevantKeywords,
-      categories: result.categories
+      keywords: result.relevantKeywords || [],
+      categories: result.categories || {}
     };
   }
 
@@ -397,20 +476,35 @@ ${relatedKeywords.join('\n')}
     const prompt = `分析以下关键词集合中的趋势模式:
 ${keywords.join('\n')}
 
-请识别:
-1. 重复出现的词语组合
-2. 常见的修饰词，特别是时间性和新颖性相关词语
-3. 用户意图指示词
-4. 潜在的市场趋势指标`;
+请返回以下JSON格式的分析结果:
+{
+  "patterns": [
+    "重复出现的词语组合1",
+    "重复出现的词语组合2",
+    ...
+  ],
+  "insights": [
+    "关于修饰词和用户意图的洞察1",
+    "关于市场趋势的洞察2",
+    ...
+  ]
+}
+
+注意:
+- patterns: 识别出的重复词语组合和模式数组
+- insights: 关于修饰词、用户意图和市场趋势的洞察数组
+- 确保返回的JSON格式完全符合上述结构`;
 
     const result = await this.llm.analyze(prompt, 'pattern_analysis', {
       format: 'json',
-      temperature: 0.4
+      temperature: 0.4,
+      maxRetries: 3,
+      retryDelay: 1000
     });
 
     return {
-      patterns: result.patterns,
-      insights: result.insights
+      patterns: result?.patterns || [],
+      insights: result?.insights || []
     };
   }
 } 

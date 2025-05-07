@@ -76,64 +76,76 @@ export interface StartupAnalysis {
   opportunity: {
     domain: string;
     timing: {
-      status: string;
-      windowSize: string;
-      urgencyLevel: 'high' | 'medium' | 'low';
-      rationale: string;
+      status?: string;
+      windowSize?: string;
+      urgencyLevel?: 'high' | 'medium' | 'low';
+      rationale?: string;
+      content?: any; // 用于存储无法解析为标准格式的响应
+      error?: string; // 错误信息
     };
     direction: {
-      trends: string[];
-      drivingFactors: string[];
-      evidence: string[];
-      confidenceLevel: number;
+      trends?: string[];
+      drivingFactors?: string[];
+      evidence?: string[];
+      confidenceLevel?: number;
+      content?: any; // 用于存储无法解析为标准格式的响应
+      error?: string; // 错误信息
     };
   };
   strategy: {
-    entryPoint: string;
-    approach: string;
-    competitiveAdvantages: string[];
-    challenges: string[];
-    differentiators: string[];
-    timingRecommendations: string[];
+    entryPoint?: string;
+    approach?: string;
+    competitiveAdvantages?: string[];
+    challenges?: string[];
+    differentiators?: string[];
+    timingRecommendations?: string[];
+    content?: any; // 用于存储无法解析为标准格式的响应
+    error?: string; // 错误信息
   };
   risks: {
-    immediate: {
+    immediate?: {
       description: string;
       severity: 'high' | 'medium' | 'low';
       mitigation: string;
     }[];
-    strategic: {
+    strategic?: {
       description: string;
       impact: string;
       timeframe: string;
       mitigation: string;
     }[];
+    content?: any; // 用于存储无法解析为标准格式的响应
+    error?: string; // 错误信息
   };
   resources: {
-    immediate: {
+    immediate?: {
       type: string;
       description: string;
       priority: 'high' | 'medium' | 'low';
     }[];
-    scaling: {
+    scaling?: {
       trigger: string;
       requirements: string[];
       timeline: string;
     }[];
-    alternatives: string[];
+    alternatives?: string[];
+    content?: any; // 用于存储无法解析为标准格式的响应
+    error?: string; // 错误信息
   };
   validation: {
-    hypotheses: {
+    hypotheses?: {
       statement: string;
       priority: 'high' | 'medium' | 'low';
     }[];
-    methods: {
+    methods?: {
       name: string;
       description: string;
       metrics: string[];
       thresholds: string[];
     }[];
-    nextSteps: string[];
-    priorities: string[];
+    nextSteps?: string[];
+    priorities?: string[];
+    content?: any; // 用于存储无法解析为标准格式的响应
+    error?: string; // 错误信息
   };
 } 

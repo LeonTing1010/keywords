@@ -4,7 +4,10 @@ import { ContentAnalyzer } from '../../domain/analysis/content/ContentAnalyzer';
 import { LLMServiceHub } from '../../infrastructure/llm/LLMServiceHub';
 import { SearchEngine } from '../../infrastructure/search/engines/SearchEngine';
 import { EnhancedWorkflowResult, MarketInsight, UserJourney, ValidationResult, JourneyInsight } from '../../domain/analysis/types/AnalysisTypes';
-import { logger } from '../../infrastructure/error/logger';
+import { logger } from '../../infrastructure/core/logger';
+import { MarkdownReporter, StartupAnalysis } from '../../infrastructure/reporting/MarkdownReporter';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // 添加未满足需求接口
 interface UnmetNeed {
@@ -27,7 +30,6 @@ export interface WorkflowControllerConfig {
   verbose: boolean;
   outputDir: string;
   language: 'zh' | 'en';
-  generateMarkdownReport: boolean;
   refinementCycles?: number; // 添加迭代循环次数
 }
 
@@ -56,7 +58,10 @@ export class WorkflowController {
       maxSteps: config.maxIterations,
       verbose: config.verbose
     });
-    this.contentAnalyzer = new ContentAnalyzer(config.llmService);
+    this.contentAnalyzer = new ContentAnalyzer(
+      config.llmService,
+      config.searchEngine
+    );
 
     if (config.verbose) {
       logger.info('工作流控制器初始化完成', { config });
@@ -196,7 +201,6 @@ export class WorkflowController {
         unmetNeedsCount: unmetNeeds.length,
         trendKeywordsCount: trendKeywords.length
       });
-
       return result;
 
     } catch (error) {

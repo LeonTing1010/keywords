@@ -4,14 +4,23 @@ import { LLMServiceHub } from '../llm/LLMServiceHub';
 import { logger } from '../core/logger';
 import {
   EnhancedWorkflowResult,
-  StartupAnalysis
-} from '../../types/reportTypes';
+} from '../../domain/analysis/types/AnalysisTypes';
+
+// 添加StartupAnalysis类型定义
+export interface StartupAnalysis {
+  opportunity: any;
+  strategy: any;
+  resources: any;
+  risks: any;
+  validation: any;
+}
 
 /**
  * 报告配置接口
  */
 export interface MarkdownReportConfig {
   language: 'zh' | 'en';
+  preserveKeywords?: string[];
 }
 
 // 多语言文本
@@ -22,7 +31,10 @@ const TRANSLATIONS = {
     keyRisks: '主要风险',
     quickWins: '快速切入点',
     recommendations: '建议',
-    generatedAt: '生成时间'
+    generatedAt: '生成时间',
+    keywords: '关键词',
+    keywordInsights: '关键词洞察',
+    preservedKeywords: '搜索关键词(保留原始形式)'
   },
   en: {
     reportTitle: 'Startup Opportunity Analysis Report',
@@ -30,7 +42,10 @@ const TRANSLATIONS = {
     keyRisks: 'Key Risks',
     quickWins: 'Quick Wins',
     recommendations: 'Recommendations',
-    generatedAt: 'Generated at'
+    generatedAt: 'Generated at',
+    keywords: 'Keywords',
+    keywordInsights: 'Keyword Insights',
+    preservedKeywords: 'Search Keywords (Original Form)'
   }
 };
 
@@ -68,8 +83,8 @@ export class MarkdownReporter {
 
       // 2. 组装完整报告
       const markdown = this.config.language === 'zh' 
-        ? this.createChineseReport(executiveSummary, marketTiming, strategySection, riskSection, validationSection, nextSteps)
-        : this.createEnglishReport(executiveSummary, marketTiming, strategySection, riskSection, validationSection, nextSteps);
+        ? this.createChineseReport([executiveSummary, marketTiming, strategySection, riskSection, validationSection, nextSteps], result)
+        : this.createEnglishReport([executiveSummary, marketTiming, strategySection, riskSection, validationSection, nextSteps], result);
 
       // 3. 保存报告
       const dir = path.dirname(outputPath);
@@ -80,35 +95,81 @@ export class MarkdownReporter {
       
       return outputPath;
     } catch (error) {
-      logger.error('生成报告失败:', error);
+      logger.error('生成报告失败:', { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
-  private createChineseReport(...sections: string[]): string {
-    return `# 创业机会分析报告
+  private createChineseReport(sections: string[], result: EnhancedWorkflowResult): string {
+    const t = TRANSLATIONS.zh;
+    
+    // 如果有关键词和搜索词，添加到报告中
+    let keywordSection = '';
+    if (result?.keyword) {
+      // 添加保留原始形式的关键词部分
+      if (this.config.preserveKeywords && this.config.preserveKeywords.length > 0) {
+        keywordSection = `## ${t.preservedKeywords}\n\n`;
+        keywordSection += this.config.preserveKeywords.map(keyword => `- \`${keyword}\``).join('\n');
+        keywordSection += '\n\n';
+      }
+    }
 
-${sections.join('\n\n')}
+    return `# ${t.reportTitle}
+
+${keywordSection ? keywordSection : ''}${sections.join('\n\n')}
 
 ---
-生成时间: ${new Date().toLocaleString('zh-CN')}
+${t.generatedAt}: ${new Date().toLocaleString('zh-CN')}
 `;
   }
 
-  private createEnglishReport(...sections: string[]): string {
-    return `# Startup Opportunity Analysis Report
+  private createEnglishReport(sections: string[], result: EnhancedWorkflowResult): string {
+    const t = TRANSLATIONS.en;
+    
+    // 如果有关键词和搜索词，添加到报告中
+    let keywordSection = '';
+    if (result?.keyword) {
+      // 添加保留原始形式的关键词部分
+      if (this.config.preserveKeywords && this.config.preserveKeywords.length > 0) {
+        keywordSection = `## ${t.preservedKeywords}\n\n`;
+        keywordSection += this.config.preserveKeywords.map(keyword => `- \`${keyword}\``).join('\n');
+        keywordSection += '\n\n';
+      }
+    }
 
-${sections.join('\n\n')}
+    return `# ${t.reportTitle}
+
+${keywordSection ? keywordSection : ''}${sections.join('\n\n')}
 
 ---
-Generated at: ${new Date().toLocaleString('en-US')}
+${t.generatedAt}: ${new Date().toLocaleString('en-US')}
 `;
+  }
+
+  // 新增: 处理文本的工具方法，保留指定关键词
+  private preserveKeywordsInText(text: string): string {
+    if (!this.config.preserveKeywords || this.config.preserveKeywords.length === 0) {
+      return text;
+    }
+
+    // 为每个关键词创建正则表达式，并替换文本中的关键词为标记版本
+    let processedText = text;
+    this.config.preserveKeywords.forEach(keyword => {
+      const regex = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      processedText = processedText.replace(regex, `\`${keyword}\``);
+    });
+
+    return processedText;
   }
 
   /**
    * 生成执行摘要 - 高度概括核心机会和关键判断
    */
   private async generateExecutiveSummary(analysis: StartupAnalysis, result: EnhancedWorkflowResult): Promise<string> {
+    // 保存原始关键词
+    const originalKeyword = result?.keyword;
+    
+    // 根据语言设置决定提示语
     const prompt = this.config.language === 'zh' 
       ? `作为一位经验丰富的创业顾问，请基于以下分析结果，生成一段简洁有力的执行摘要。
       重点关注：
@@ -124,7 +185,8 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - 用简单直接的语言
       - 突出最重要的判断
       - 不超过300字
-      - 确保每个判断都有数据支持`
+      - 确保每个判断都有数据支持
+      ${originalKeyword ? `- 保持关键词 "${originalKeyword}" 的原始形式` : ''}`
       : `As an experienced startup advisor, please generate a concise and powerful executive summary based on the following analysis.
       Focus on:
       1. What is the core value proposition of this opportunity
@@ -139,12 +201,20 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Use simple and direct language
       - Highlight the most important judgments
       - No more than 300 words
-      - Ensure each judgment is supported by data`;
+      - Ensure each judgment is supported by data
+      ${originalKeyword ? `- Keep the keyword "${originalKeyword}" in its original form` : ''}`;
 
-    const summary = await this.llm.analyze(prompt, 'executive_summary', { temperature: 0.7 });
+    const response = await this.llm.analyze(prompt, 'executive_summary', { temperature: 0.7 });
+    let summary = typeof response === 'object' ? (response.content || response.raw || JSON.stringify(response)) : String(response);
+    
+    // 处理文本，确保关键词保留原始形式
+    summary = this.preserveKeywordsInText(summary);
+    let summaryText = typeof summary === 'object'
+    ? (summary.content || summary.raw || JSON.stringify(summary))
+    : String(summary);
     return this.config.language === 'zh' 
-      ? `## 执行摘要\n\n${summary}`
-      : `## Executive Summary\n\n${summary}`;
+      ? `## 执行摘要\n\n${summaryText}`
+      : `## Executive Summary\n\n${summaryText}`;
   }
 
   /**
@@ -182,9 +252,12 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Explain competitive dynamics`;
 
     const timing = await this.llm.analyze(prompt, 'market_timing', { temperature: 0.7 });
+    let timingText = typeof timing === 'object'
+    ? (timing.content || timing.raw || JSON.stringify(timing))
+    : String(timing);
     return this.config.language === 'zh'
-      ? `## 市场时机分析\n\n${timing}`
-      : `## Market Timing Analysis\n\n${timing}`;
+      ? `## 市场时机分析\n\n${timingText}`
+      : `## Market Timing Analysis\n\n${timingText}`;
   }
 
   /**
@@ -228,9 +301,12 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Focus on rapid validation and adjustment`;
 
     const strategy = await this.llm.analyze(prompt, 'strategy', { temperature: 0.7 });
+    let strategyText = typeof strategy === 'object'
+    ? (strategy.content || strategy.raw || JSON.stringify(strategy))
+    : String(strategy);
     return this.config.language === 'zh'
-      ? `## 策略建议\n\n${strategy}`
-      : `## Strategy Recommendations\n\n${strategy}`;
+      ? `## 策略建议\n\n${strategyText}`
+      : `## Strategy Recommendations\n\n${strategyText}`;
   }
 
   /**
@@ -268,9 +344,12 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Emphasize controllability`;
 
     const risks = await this.llm.analyze(prompt, 'risks', { temperature: 0.7 });
+    let risksText = typeof risks === 'object'
+    ? (risks.content || risks.raw || JSON.stringify(risks))
+    : String(risks);
     return this.config.language === 'zh'
-      ? `## 风险分析\n\n${risks}`
-      : `## Risk Analysis\n\n${risks}`;
+      ? `## 风险分析\n\n${risksText}`
+      : `## Risk Analysis\n\n${risksText}`;
   }
 
   /**
@@ -308,9 +387,12 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Specific timeframes`;
 
     const validation = await this.llm.analyze(prompt, 'validation', { temperature: 0.7 });
+    let validationText = typeof validation === 'object'
+    ? (validation.content || validation.raw || JSON.stringify(validation))
+    : String(validation);
     return this.config.language === 'zh'
-      ? `## 验证方案\n\n${validation}`
-      : `## Validation Plan\n\n${validation}`;
+      ? `## 验证方案\n\n${validationText}`
+      : `## Validation Plan\n\n${validationText}`;
   }
 
   /**
@@ -354,8 +436,11 @@ Generated at: ${new Date().toLocaleString('en-US')}
       - Can start immediately`;
 
     const nextSteps = await this.llm.analyze(prompt, 'next_steps', { temperature: 0.7 });
+    let nextStepsText = typeof nextSteps === 'object'
+    ? (nextSteps.content || nextSteps.raw || JSON.stringify(nextSteps))
+    : String(nextSteps);
     return this.config.language === 'zh'
-      ? `## 下一步行动计划\n\n${nextSteps}`
-      : `## Next Steps Action Plan\n\n${nextSteps}`;
+      ? `## 下一步行动计划\n\n${nextStepsText}`
+      : `## Next Steps Action Plan\n\n${nextStepsText}`;
   }
 } 

@@ -9,6 +9,7 @@ interface AnalysisOptions {
   model: string;
   temperature: number;
   verbose: boolean;
+  preserveKeywords?: string[];
 }
 
 export class StartupAnalysisService {

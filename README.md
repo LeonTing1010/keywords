@@ -176,7 +176,7 @@ npm run intent "智能家居控制系统"
 
 ## 文档
 
-- [系统架构](docs/core/architecture.md)
+- [系统架构](docs/architecture/architecture.md)
 - [未满足需求分析](docs/core/unmet-needs-analysis.md)
 - [API文档](docs/api/api.md)
 - [配置选项](docs/usage/configuration.md)

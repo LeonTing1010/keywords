@@ -3,9 +3,8 @@
  * 统一管理与大语言模型的交互，提供标准化的接口
  */
 import * as crypto from 'crypto';
-import { logger } from '../error/logger';
-import { AppError, ErrorType } from '../../core/errorHandler';
-import { envConfig } from '../config/env';
+import { logger } from '../core/logger';
+import { JsonEnforcedLLMProvider } from './JsonEnforcedLLMProvider';
 
 // LLM消息接口
 export interface LLMMessage {
@@ -23,9 +22,13 @@ export interface LLMOptions {
   frequencyPenalty?: number; // 频率惩罚系数
   stop?: string[]; // 停止词
   systemPrompt?: string; // 系统提示词
-  format?: 'json' | 'text'; // 期望的输出格式
+  format?: 'json' | 'text' | 'markdown'; // 期望的输出格式
   language?: 'zh' | 'en'; // 期望的输出语言
   model?: string;
+  strictFormat?: boolean;
+  maxRetries?: number;
+  retryDelay?: number;
+  [key: string]: any; // 允许其他属性
 }
 
 // LLM提供者接口
@@ -41,10 +44,13 @@ interface LLMConfig {
 }
 
 export interface AnalyzeOptions {
+  maxRetries?: number;
+  retryDelay?: number;
   systemPrompt?: string;
   format?: 'json' | 'text' | 'markdown';
   temperature?: number;
   maxTokens?: number;
+  strictFormat?: boolean; // 添加严格格式选项
 }
 
 export interface LLMServiceConfig {
@@ -137,12 +143,17 @@ export class LLMServiceHub {
   /**
    * 分析文本内容
    */
-  public async analyze(prompt: string, analysisType: string, options: AnalyzeOptions): Promise<any> {
+  public async analyze(prompt: string, analysisType: string, options: AnalyzeOptions = {}): Promise<any> {
     try {
       // In mock mode, return mock data for testing
       if (this.mockMode) {
         logger.info('Using mock mode for LLM');
         return this.getMockResponse(prompt);
+      }
+      
+      // 如果请求的是JSON格式，默认启用严格模式
+      if (options.format === 'json' && options.strictFormat === undefined) {
+        options.strictFormat = true;
       }
       
       logger.info('开始LLM分析', { task: analysisType, model: this.model });
@@ -158,46 +169,152 @@ export class LLMServiceHub {
       const model = this.model;
       let response;
 
-      try {
-        // 根据模型类型选择合适的API调用方法
-        if (model.includes('claude')) {
-          // 使用Anthropic Claude API
-          logger.debug(`使用Claude API调用 [${this.apiEndpoint}]`, { model });
-          response = await this.callClaudeAPI(prompt, temperature, options);
-        } else if (model.includes('qwen') || model === 'qwen-plus' || model.includes('dashscope')) {
-          // 使用通义千问API
-          logger.debug(`使用通义千问API调用 [${this.apiEndpoint}]`, { model });
-          response = await this.callQwenAPI(prompt, temperature, options);
-        } else {
-          // 默认使用OpenAI API
-          logger.debug(`使用OpenAI API调用 [${this.apiEndpoint}]`, { model });
-          response = await this.callOpenAIAPI(prompt, temperature, options);
-        }
+      // 重试配置
+      const maxRetries = options.maxRetries || 3;
+      const retryDelay = options.retryDelay || 1000; // 默认1秒
+      let retryCount = 0;
+      let lastError: any;
 
-        logger.info('LLM调用输出', { 
-          model, 
-          source: analysisType, 
-          output: JSON.stringify(response).substring(0, 200) + (JSON.stringify(response).length > 200 ? '...' : '') 
-        });
-        
-        logger.debug(`LLM API调用成功 [${requestId}]`, {});
-        
-        return this.parseResponse(response, options.format || 'json');
-      } catch (error: any) {
-        logger.error('API调用失败', { error, model, endpoint: this.apiEndpoint });
-        
-        // 返回一个基本的响应，避免完全失败
-        return { 
-          error: '模型API调用失败', 
-          message: error.message,
-          modelType: model,
-          endpoint: this.apiEndpoint
-        };
+      while (retryCount < maxRetries) {
+        try {
+          // 根据模型类型选择合适的API调用方法
+          if (model.includes('claude')) {
+            // 使用Anthropic Claude API
+            logger.debug(`使用Claude API调用 [${this.apiEndpoint}]`, { model, attempt: retryCount + 1 });
+            response = await this.callClaudeAPI(prompt, temperature, options);
+          } else if (model.includes('qwen') || model === 'qwen-plus' || model.includes('dashscope')) {
+            // 使用通义千问API
+            logger.debug(`使用通义千问API调用 [${this.apiEndpoint}]`, { model, attempt: retryCount + 1 });
+            response = await this.callQwenAPI(prompt, temperature, options);
+          } else {
+            // 默认使用OpenAI API
+            logger.debug(`使用OpenAI API调用 [${this.apiEndpoint}]`, { model, attempt: retryCount + 1 });
+            response = await this.callOpenAIAPI(prompt, temperature, options);
+          }
+
+          logger.info('LLM调用输出', { 
+            model, 
+            source: analysisType, 
+            output: JSON.stringify(response).substring(0, 200) + (JSON.stringify(response).length > 200 ? '...' : '') 
+          });
+          
+          logger.debug(`LLM API调用成功 [${requestId}]`, {});
+
+          try {
+            // 解析响应格式
+            const parsedResponse = this.parseResponse(response, options.format || 'json');
+            
+            // 检查JSON解析结果
+            if (options.format === 'json' && options.strictFormat === true) {
+              // 检查是否返回了raw字段，这意味着JSON解析失败
+              if (parsedResponse.raw && typeof parsedResponse.raw === 'string') {
+                throw new Error('JSON格式验证失败');
+              }
+            }
+            
+            return parsedResponse;
+          } catch (formatError: any) {
+            // 如果是格式错误且需要严格格式，我们应该重试
+            if (options.format === 'json' && (options.strictFormat === true || formatError.message === 'JSON格式验证失败')) {
+              logger.warn('LLM返回格式错误，将进行重试', { 
+                error: formatError.message,
+                format: options.format,
+                modelType: model
+              });
+              throw formatError; // 抛出错误，触发重试逻辑
+            } else {
+              // 其他情况正常返回解析结果
+              return this.parseResponse(response, options.format || 'json');
+            }
+          }
+        } catch (error: any) {
+          lastError = error;
+          retryCount++;
+          
+          // 检查是否应该重试
+          const shouldRetry = this.shouldRetry(error) || 
+            // 添加对格式错误的重试支持
+            (options.format === 'json' && options.strictFormat === true && 
+            (error.message === 'JSON格式验证失败' || (typeof error.message === 'string' && error.message.includes('JSON'))));
+          
+          if (retryCount < maxRetries && shouldRetry) {
+            const delay = retryDelay * Math.pow(2, retryCount - 1); // 指数退避
+            logger.warn(`API调用失败，准备第${retryCount}次重试`, { 
+              error: error.message,
+              delay,
+              model,
+              endpoint: this.apiEndpoint
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          // 如果不需要重试或已达到最大重试次数
+          logger.error('API调用失败', { 
+            error, 
+            model, 
+            endpoint: this.apiEndpoint,
+            retryCount,
+            shouldRetry
+          });
+          
+          // 返回一个基本的响应，避免完全失败
+          return { 
+            error: '模型API调用失败', 
+            message: error.message,
+            modelType: model,
+            endpoint: this.apiEndpoint,
+            retryCount
+          };
+        }
       }
+      
+      // 如果所有重试都失败了
+      throw lastError;
     } catch (error) {
       logger.error('LLM分析失败', { error, task: analysisType });
       throw error;
     }
+  }
+
+  /**
+   * 判断是否应该重试请求
+   * @param error API调用错误
+   * @returns 是否应该重试
+   */
+  private shouldRetry(error: any): boolean {
+    // 网络错误
+    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+      return true;
+    }
+    
+    // API限流错误
+    if (error.status === 429 || error.statusCode === 429) {
+      return true;
+    }
+    
+    // 服务器错误
+    if (error.status >= 500 || error.statusCode >= 500) {
+      return true;
+    }
+    
+    // OpenAI API特定错误
+    if (error.response?.status === 429 || error.response?.status >= 500) {
+      return true;
+    }
+    
+    // Anthropic API特定错误
+    if (error.type === 'rate_limit_error' || error.type === 'server_error') {
+      return true;
+    }
+    
+    // 格式错误
+    if (error.message === 'JSON格式验证失败' || 
+       (typeof error.message === 'string' && error.message.includes('JSON'))) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -206,9 +323,13 @@ export class LLMServiceHub {
   private async callQwenAPI(prompt: string, temperature: number, options: AnalyzeOptions): Promise<any> {
     // 构建通义千问API请求
     const systemPrompt = options.systemPrompt || 
-                        `你是一个专业的市场分析助手，请根据用户的提示进行分析。${
-                          options.format === 'json' ? '请以JSON格式返回结果。' : ''
-                        }`;
+                        `你是一位精通市场分析和用户研究的专家级助手。请你以系统化、客观的视角分析用户提供的数据，挖掘深层的洞察和趋势。
+                        在分析时：
+                        1. 关注数据背后的用户行为模式和潜在需求
+                        2. 识别市场缺口和增长机会
+                        3. 剖析关键趋势并提供有深度的见解
+                        4. 确保每项分析都有清晰的事实支持和合理推理
+                        ${options.format === 'json' ? '请严格按照要求的JSON格式返回结果，确保结构完整且易于解析。每个字段都需符合指定的数据类型与范围。' : ''}`;
     
     // 使用OpenAI格式构建请求体 (通义千问完全兼容此格式)
     const requestBody = {
@@ -291,9 +412,13 @@ export class LLMServiceHub {
   private async callOpenAIAPI(prompt: string, temperature: number, options: AnalyzeOptions): Promise<any> {
     // 构建OpenAI API请求
     const systemPrompt = options.systemPrompt || 
-                        `你是一个专业的市场分析助手，请根据用户的提示进行分析。${
-                          options.format === 'json' ? '请以JSON格式返回结果。' : ''
-                        }`;
+                        `你是一位精通市场分析和用户研究的专家级助手。请你以系统化、客观的视角分析用户提供的数据，挖掘深层的洞察和趋势。
+                        在分析时：
+                        1. 关注数据背后的用户行为模式和潜在需求
+                        2. 识别市场缺口和增长机会
+                        3. 剖析关键趋势并提供有深度的见解
+                        4. 确保每项分析都有清晰的事实支持和合理推理
+                        ${options.format === 'json' ? '请严格按照要求的JSON格式返回结果，确保结构完整且易于解析。每个字段都需符合指定的数据类型与范围。' : ''}`;
     
     const requestBody = {
       model: this.model,
@@ -351,9 +476,13 @@ export class LLMServiceHub {
   private async callClaudeAPI(prompt: string, temperature: number, options: AnalyzeOptions): Promise<any> {
     // 构建Claude API请求
     const systemPrompt = options.systemPrompt || 
-                        `你是一个专业的市场分析助手，请根据用户的提示进行分析。${
-                          options.format === 'json' ? '请以JSON格式返回结果。' : ''
-                        }`;
+                        `你是一位精通市场分析和用户研究的专家级助手。请你以系统化、客观的视角分析用户提供的数据，挖掘深层的洞察和趋势。
+                        在分析时：
+                        1. 关注数据背后的用户行为模式和潜在需求
+                        2. 识别市场缺口和增长机会
+                        3. 剖析关键趋势并提供有深度的见解
+                        4. 确保每项分析都有清晰的事实支持和合理推理
+                        ${options.format === 'json' ? '请严格按照要求的JSON格式返回结果，确保结构完整且易于解析。每个字段都需符合指定的数据类型与范围。' : ''}`;
     
     const requestBody = {
       model: this.model,
@@ -549,5 +678,15 @@ export class LLMServiceHub {
    */
   public getModelName(): string {
     return this.model;
+  }
+
+  /**
+   * 创建一个JSON强制的LLM提供者
+   * 这个方法符合OOP工厂模式，用于创建专门处理JSON响应的提供者
+   * @param provider 原始LLM提供者
+   * @param maxJsonRetries 最大JSON格式重试次数
+   */
+  public createJsonEnforcedProvider(provider: LLMProvider, maxJsonRetries: number = 3): LLMProvider {
+    return new JsonEnforcedLLMProvider(provider, maxJsonRetries);
   }
 } 
