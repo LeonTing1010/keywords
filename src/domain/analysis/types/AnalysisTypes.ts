@@ -5,7 +5,11 @@ export interface JourneyStep {
   query: string;
   intent: string;
   satisfaction: number;
-  nextQueries: string[];
+  nextQueries: Array<{
+    suggestion: string;
+    satisfaction: number;
+    reason: string;
+  }>;
 }
 
 /**

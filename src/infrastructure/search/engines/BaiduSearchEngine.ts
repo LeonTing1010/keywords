@@ -275,7 +275,7 @@ export class BaiduSearchEngine implements SearchEngine {
           return options.customFilters.every(filter => filter(suggestion));
         });
       
-      logger.info(`获取到 ${filteredSuggestions.length} 条建议`);
+      logger.debug(`获取到 ${filteredSuggestions.length} 条建议`);
       
       return filteredSuggestions.map((suggestion, index) => ({
         query: suggestion,
@@ -481,7 +481,7 @@ export class BaiduSearchEngine implements SearchEngine {
         options?.maxResults || 3
       );
       
-      logger.info(`获取到 ${results.length} 条搜索结果`);
+      logger.debug(`获取到 ${results.length} 条搜索结果`);
       return results;
     } catch (error) {
       if (this.page) {

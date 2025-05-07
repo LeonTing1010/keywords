@@ -21,16 +21,9 @@ export interface WorkflowControllerConfig {
   searchEngine: SearchEngine;
   llmService: LLMServiceHub;
   maxIterations: number;
-  satisfactionThreshold: number;
-  analysisDepth: number;
-  outputFormat: 'json' | 'markdown';
   enableJourneySim: boolean;
-  enableAutocomplete: boolean;
-  autocompleteEngine?: string;
+  refinementCycles: number; // 添加迭代循环次数
   verbose: boolean;
-  outputDir: string;
-  language: 'zh' | 'en';
-  refinementCycles?: number; // 添加迭代循环次数
 }
 
 /**
@@ -46,7 +39,7 @@ export class WorkflowController {
   constructor(config: WorkflowControllerConfig) {
     this.config = {
       ...config,
-      refinementCycles: config.refinementCycles || 1, // 默认执行一个循环
+      refinementCycles: config.refinementCycles || 3, // 默认执行一个循环
     };
     this.discovery = new TrendKeywordDiscovery({
       llmService: config.llmService,
@@ -92,11 +85,9 @@ export class WorkflowController {
         logger.info(`开始第 ${cycle + 1} 次优化循环`);
         
         // 1. 关键词发现 - 由SimpleKeywordDiscovery负责
-        //    核心职责：挖掘趋势关键词，发现市场大方向
         const discoveryResult = await this.discovery.discoverKeywords(
           keyword,
           cycle > 0 ? { 
-            // 后续循环将市场洞察转换为主题，用于精细化关键词
             themes: marketInsights.slice(0, 3).map(i => i.description),
             excludeExisting: discoveredKeywords
           } : undefined
@@ -105,37 +96,35 @@ export class WorkflowController {
         // 更新已发现的关键词
         discoveredKeywords = [...discoveryResult.keywords];
         
-        // 获取初始市场洞察（仅在第一次循环）
+        // 获取趋势关键词和市场大方向（每轮都更新）
+        trendKeywords = discoveryResult.trendKeywords || [];
+        directionSummary = discoveryResult.directionSummary || directionSummary;
+
+        // mainkeyword 取 trendKeywords[0]，如无则回退为原始 keyword
+        const mainkeyword = trendKeywords[0] || keyword;
+        
+        // 首轮获取初始市场洞察
         if (cycle === 0) {
           marketInsights = discoveryResult.initialInsights || [];
-          // 新增：获取趋势关键词和市场大方向
-          trendKeywords = discoveryResult.trendKeywords || [];
-          directionSummary = discoveryResult.directionSummary || '';
         }
         
         logger.info('关键词发现完成', { 
           count: discoveredKeywords.length,
           initialInsightsCount: discoveryResult.initialInsights?.length || 0,
-          trendKeywordsCount: discoveryResult.trendKeywords?.length || 0
+          trendKeywordsCount: trendKeywords.length
         });
         
-        // 2. 用户旅程模拟 - 由UserJourneySim负责
-        //    核心职责：基于关键词和市场洞察，模拟用户行为，找到痛点和机会
+        // 2. 用户旅程模拟
         if (this.config.enableJourneySim) {
-          // 传递关键词、相关关键词和市场洞察，增强模拟效果
-          // 优先使用趋势关键词进行旅程模拟
-          const journeyKeywords = trendKeywords.length > 0 
-            ? trendKeywords 
-            : discoveredKeywords;
-            
+          // mainkeyword 作为主关键词，trendKeywords 作为相关关键词
           const journeyResult = await this.journeySim.simulateJourney(
-            keyword, 
-            journeyKeywords,
+            mainkeyword, 
+            trendKeywords,
             marketInsights
           );
           
           userJourneys.push(journeyResult);
-          
+          keyword = journeyResult.startKeyword || mainkeyword;
           logger.info('用户旅程模拟完成', { 
             journeyCount: userJourneys.length,
             insightsCount: journeyResult.insights?.length || 0,
@@ -144,25 +133,20 @@ export class WorkflowController {
           });
         }
         
-        // 3. 内容分析 - 由ContentAnalyzer负责
-        //    核心职责：整合前面的发现，找到未被满足的具体需求
+        // 3. 内容分析
         const enhancedJourneys = userJourneys as EnhancedUserJourney[];
-        
-        // 提取用户旅程中的痛点和机会
         const painPoints = enhancedJourneys.flatMap(journey => journey.painPoints || []);
         const opportunities = enhancedJourneys.flatMap(journey => journey.opportunities || []);
         
-        // 将前面的分析结果传递给内容分析器，实现整合
+        // mainkeyword 作为分析关键词，trendKeywords 作为相关关键词
         const contentAnalysis = await this.contentAnalyzer.analyzeContent(
-          keyword, 
-          // 优先分析趋势关键词
-          trendKeywords.length > 0 ? trendKeywords : discoveredKeywords,
+          mainkeyword, 
+          trendKeywords,
           painPoints,
           opportunities,
           marketInsights
         );
         
-        // 更新市场洞察、未满足需求和验证结果
         marketInsights = contentAnalysis.insights;
         unmetNeeds = contentAnalysis.unmetNeeds;
         validationResults = contentAnalysis.validationResults;

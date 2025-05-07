@@ -26,7 +26,6 @@ interface CliOptions {
   verbose: boolean;
   proxy?: string;
   output?: string;
-  preserveKeywords?: boolean;
 }
 
 function parseArguments(): { keyword: string; options: CliOptions } {
@@ -36,7 +35,6 @@ function parseArguments(): { keyword: string; options: CliOptions } {
     format: (process.env.OUTPUT_FORMAT as 'json' | 'markdown') || 'json',
     language: (process.env.LANGUAGE as 'zh' | 'en') || 'zh',
     verbose: false,
-    preserveKeywords: process.env.PRESERVE_KEYWORDS === 'true'
   };
   
   // 调试输出环境变量
@@ -67,9 +65,6 @@ function parseArguments(): { keyword: string; options: CliOptions } {
         case '--output':
           options.output = args[++i];
           break;
-        case '--preserve-keywords':
-          options.preserveKeywords = true;
-          break;
       }
     } else if (!keyword) {
       keyword = arg;
@@ -98,7 +93,6 @@ async function main() {
     if (options.verbose) {
       console.log('启用详细日志模式');
     }
-
     logger.info('启动分析系统', { keyword, options });
 
     // 创建搜索引擎实例
@@ -122,18 +116,11 @@ async function main() {
     const workflowController = new WorkflowController({
       searchEngine,
       llmService,
-      maxIterations: 3,
-      satisfactionThreshold: 0.85,
-      analysisDepth: 2,
-      outputFormat: options.format,
-      enableJourneySim: true,
-      enableAutocomplete: true,
       verbose: options.verbose,
-      outputDir: './output',
-      language: options.language,
+      maxIterations: 5,
+      enableJourneySim: true,
+      refinementCycles: 5
     });
-    const startupService = new StartupAnalysisService()
-
     // 执行分析工作流
     const result = await workflowController.executeWorkflow(keyword);
 
@@ -162,7 +149,6 @@ async function main() {
         model: llmService.getModelName(),
         temperature: 0.7,
         verbose: options.verbose,
-        preserveKeywords: options.preserveKeywords ? [keyword] : [],
         outputDir: path.dirname(outputPath)
       });
       

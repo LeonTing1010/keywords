@@ -209,7 +209,7 @@ export class ContentAnalyzer {
     painPoints?: PainPoint[]
   ): Promise<UnmetNeed[]> {
     // 1. 抓取市场已有解决方案
-    const existingSolutions = await this.fetchExistingSolutions(relatedKeywords);
+    const existingSolutions = await this.fetchExistingSolutions([mainKeyword]);
   
     // 2. 组装已有方案文本
     const existingSolutionsText = existingSolutions && existingSolutions.length > 0

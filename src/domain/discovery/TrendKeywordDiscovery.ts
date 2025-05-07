@@ -63,7 +63,14 @@ export class TrendKeywordDiscovery {
       logger.info('开始趋势关键词和市场方向分析', { mainKeyword });
 
       // 1. 获取搜索引擎自动补全
-      const autoCompleteResults = await this.searchEngine.getSuggestions(mainKeyword);
+      // Generate autocomplete suggestions by appending a-z letters to main keyword
+      const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+      // Process letters sequentially
+      const autoCompleteResults = [];
+      for (const letter of letters) {
+        const result = await this.searchEngine.getSuggestions(`${mainKeyword} ${letter}`);
+        autoCompleteResults.push(...result);
+      }
       logger.debug('获取自动补全结果', { count: autoCompleteResults.length });
       
       // 提取查询关键词数组

@@ -113,7 +113,7 @@ export class UserJourneySim {
         journey.steps.push(step);
 
         // 如果用户满意度高，结束旅程
-        if (step.satisfaction > 0.8) {
+        if (step.satisfaction > 0.9) {
           break;
         }
 
@@ -125,10 +125,15 @@ export class UserJourneySim {
         // 如果有相关关键词，考虑将它们纳入决策
         let nextOptions = [...step.nextQueries];
         if (relatedKeywords && relatedKeywords.length > 0) {
-          // 选择1-2个相关关键词，但避免重复
+          // 选择1-3个相关关键词，但避免重复
           const relevantOptions = relatedKeywords
-            .filter(k => !nextOptions.includes(k) && k !== currentQuery)
-            .slice(0, 2);
+            .filter(k => !nextOptions.map(opt => opt.suggestion).includes(k) && k !== currentQuery)
+            .slice(0, 3)
+            .map(k => ({
+              suggestion: k,
+              satisfaction: 0.7, // 默认相关性较高
+              reason: '用户提供的相关关键词'
+            }));
           nextOptions = [...nextOptions, ...relevantOptions];
         }
         
@@ -197,30 +202,44 @@ ${suggestions.join('\n')}
 市场洞察:
 ${relevantInsights.join('\n')}
 
-请生成一个JSON对象，包含以下精确分析:
+请严格按照以下要求生成JSON格式结果:
+
+1. 对每个自动补全建议进行单独评估:
 {
+  "suggestions": [
+    {
+      "suggestion": "建议1原文",
+      "satisfaction": 0.0-1.0之间的数值,
+      "reason": "满意度评分理由"
+    },
+    // ... 所有建议的评估 ...
+  ],
   "intent": "用户的具体查询意图，详细描述用户真实目标、背后需求与痛点",
-  "satisfaction": 0.0-1.0之间的数值，精确评估用户对建议的满意程度,
-  "nextQueries": ["可能的下一步查询1", "可能的下一步查询2", "可能的下一步查询3"],
+  "satisfaction": 0.0-1.0之间的数值，整体评估用户对建议的满意程度,
   "insightRelevance": 0.0-1.0之间的数值，量化查询与市场洞察的关联度与价值
 }
 
-分析要求:
-- intent需基于查询和建议进行深度分析，挖掘用户真实需求背后的动机
-- satisfaction评分需考虑建议与意图的匹配度、多样性、深度和相关性
-- nextQueries必须是高度相关且符合用户认知流程的后续查询路径，确保逻辑性和连贯性
-- insightRelevance需评估市场洞察与用户意图的实际关联价值`;
+评估要求:
+- 每个suggestion必须包含原始建议文本、满意度评分和评分理由
+- satisfaction评分标准必须考虑与用户意图的匹配度、信息价值和查询相关性
+- 必须对所有自动补全建议进行评估，不得遗漏
+- 最终nextQueries将由系统自动从suggestions中选取满意度最高的3个形成`;
 
     const result = await this.llm.analyze(prompt, 'search_step_with_insights', {
       format: 'json',
       temperature: 0.3
     });
 
+    // 处理评估结果，选择满意度最高的3个建议作为nextQueries
+    const topSuggestions = result.suggestions
+      ? [...result.suggestions].sort((a, b) => b.satisfaction - a.satisfaction).slice(0, 3)
+      : [];
+
     return {
       query,
       intent: result.intent,
       satisfaction: result.satisfaction,
-      nextQueries: result.nextQueries
+      nextQueries: topSuggestions
     };
   }
 
@@ -237,32 +256,52 @@ ${relevantInsights.join('\n')}
 自动补全建议:
 ${suggestions.join('\n')}
 
-请提供以下JSON格式的深入分析结果:
+请严格按照以下要求生成JSON格式结果:
+
+1. 对每个自动补全建议进行单独评估:
 {
-  "intent": "用户的具体查询意图，深入分析背后目标、需求层次和可能的情境",
-  "satisfaction": 0.0-1.0之间的数值，精确评估搜索建议的匹配度和有效性,
-  "nextQueries": ["可能的下一步查询1", "可能的下一步查询2", "可能的下一步查询3"]
+  "suggestions": [
+    {
+      "suggestion": "建议1原文",
+      "satisfaction": 0.0-1.0之间的数值,
+      "reason": "满意度评分理由"
+    },
+    // ... 所有建议的评估 ...
+  ],
+  "intent": "用户的具体查询意图，深入分析背后目标、需求层次和可能的情境"
 }
 
-分析要求:
+评估要求:
 - intent分析必须挖掘查询背后的真实用户需求，考虑可能的使用场景和目标
+- 每个suggestion必须包含原始建议文本、满意度评分和评分理由
 - satisfaction评分标准：
   * 0.0-0.3：建议与意图几乎无关，无法满足需求
   * 0.4-0.6：建议部分相关，但缺乏深度或全面性
   * 0.7-0.9：建议高度相关，能满足大部分需求
   * 1.0：建议完全匹配意图，覆盖全面且深入
-- nextQueries需要遵循用户认知发展的自然路径，确保每个后续查询都是对当前查询的合理发展`;
+- 必须对所有自动补全建议进行评估，不得遗漏
+- 最终nextQueries将由系统自动从suggestions中选取满意度最高的3个形成`;
 
     const result = await this.llm.analyze(prompt, 'search_step_analysis', {
       format: 'json',
       temperature: 0.3
     });
 
+    // 处理评估结果，选择满意度最高的3个建议作为nextQueries
+    const topSuggestions = result.suggestions
+      ? [...result.suggestions].sort((a, b) => b.satisfaction - a.satisfaction).slice(0, 3)
+      : [];
+
+    // 计算整体满意度作为步骤的满意度（可以是平均值或加权平均）
+    const overallSatisfaction = result.suggestions && result.suggestions.length > 0
+      ? result.suggestions.reduce((sum: number, item: {satisfaction: number}) => sum + item.satisfaction, 0) / result.suggestions.length
+      : 0;
+
     return {
       query,
       intent: result.intent,
-      satisfaction: result.satisfaction,
-      nextQueries: result.nextQueries
+      satisfaction: overallSatisfaction,
+      nextQueries: topSuggestions
     };
   }
 
@@ -405,17 +444,19 @@ ${insightsText}
    */
   private async makeDecision(
     currentQuery: string,
-    options: string[]
+    options: Array<{suggestion: string; satisfaction: number; reason: string;}>
   ): Promise<DecisionPoint> {
+    const optionsArray = options.map(opt => opt.suggestion);
+    
     const prompt = `分析当前搜索查询"${currentQuery}"，从以下选项中选择最合适的下一步查询:
 
 选项列表:
-${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
+${optionsArray.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
 
 请严格按照以下JSON格式返回结果:
 {
   "query": "${currentQuery}",
-  "options": ${JSON.stringify(options)},
+  "options": ${JSON.stringify(optionsArray)},
   "chosenOption": "必须从选项列表中选择一个选项",
   "reason": "详细说明选择理由，包括: 1)与当前主题的相关性 2)信息获取的进展和深度 3)用户可能的思维路径和意图"
 }
@@ -430,7 +471,12 @@ ${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
       temperature: 0.5
     });
 
-    return result as DecisionPoint;
+    return {
+      query: result.query,
+      options: optionsArray,
+      chosenOption: result.chosenOption,
+      reason: result.reason
+    };
   }
 
   /**
