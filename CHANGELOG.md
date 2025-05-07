@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 架构升级
+- 重构为基于多Agent协作的架构，提高可扩展性和功能模块化
+- 添加Agent系统核心组件，包括协调器、通信机制和工具库
+- 设计专业化Agent角色，包括关键词挖掘Agent、用户旅程Agent、内容分析Agent和报告生成Agent
+- 优化Agent间数据交互与协作流程
+
 ### 项目重命名
 - 项目由KeywordIntent更名为NeedMiner，反映核心价值转变
 
