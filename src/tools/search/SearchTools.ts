@@ -208,24 +208,14 @@ export class SearchTools {
       try {
         logger.debug('Tool: Discovering keywords', { keyword });
         
-        // 使用字母前缀策略发现更多相关关键词
-        const letters = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
-        const queries = letters.map(letter => `${keyword} ${letter}`);
-        
-        // 获取自动补全结果
+        // 获取关键词的自动补全建议
         const allSuggestions: string[] = [];
-        for (const query of queries) {
-          try {
-            const suggestions = await searchEngine.getSuggestions(query);
-            allSuggestions.push(...suggestions.map(s => s.query));
-            
-            // 添加延迟，避免API限制
-            await new Promise(r => setTimeout(r, 500));
-          } catch (e) {
-            logger.warn('Error getting suggestions for keyword', { query, error: e });
-          }
+        try {
+          const suggestions = await searchEngine.getSuggestions(keyword);
+          allSuggestions.push(...suggestions.map(s => s.query));
+        } catch (e) {
+          logger.warn('Error getting suggestions for keyword', { keyword, error: e });
         }
-        
         // 去重和过滤
         const uniqueSuggestions = [...new Set(allSuggestions)]
           .filter(s => s.toLowerCase().includes(keyword.toLowerCase()))

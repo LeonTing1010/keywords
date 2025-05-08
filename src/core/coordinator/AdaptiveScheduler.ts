@@ -92,6 +92,7 @@ export class AdaptiveScheduler {
   private readonly resourceConfig: Required<ResourceMonitorConfig>;
   private resources: SystemResources;
   private monitorIntervalId?: NodeJS.Timeout;
+  private executeAgentFn?: (agentId: string, context: any) => Promise<any>;
   
   /**
    * 创建自适应调度器实例
@@ -354,15 +355,15 @@ export class AdaptiveScheduler {
           return;
         }
         
-        // 模拟执行Agent（实际实现中应调用Agent.execute方法）
-        // const result = await this.executeAgent(step.agentId, context.data);
-        
-        // 模拟异步执行
-        await new Promise(resolve => {
-          setTimeout(resolve, 100);
-        });
-        
-        const result = { stepId: step.stepId, status: 'success', data: {} };
+        // 调用自定义Agent执行逻辑
+        let result;
+        if (this.executeAgentFn) {
+          result = await this.executeAgentFn(step.agentId, context.data);
+        } else {
+          // fallback: 模拟异步执行
+          await new Promise(resolve => setTimeout(resolve, 100));
+          result = { stepId: step.stepId, status: 'success', data: {} };
+        }
         
         // 更新步骤状态和结果
         step.status = 'completed';
@@ -532,5 +533,12 @@ export class AdaptiveScheduler {
    */
   public getResourceInfo(): SystemResources {
     return { ...this.resources };
+  }
+  
+  /**
+   * 设置自定义Agent执行函数
+   */
+  public setAgentExecutor(fn: (agentId: string, context: any) => Promise<any>) {
+    this.executeAgentFn = fn;
   }
 } 

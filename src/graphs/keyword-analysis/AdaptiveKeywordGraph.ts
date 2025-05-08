@@ -16,6 +16,7 @@ import { BaseAgent } from '../../agents/base/BaseAgent';
 import { logger } from '../../infra/logger';
 import { WebSearchEngine } from '../../infra/search/engines/WebSearchEngine';
 import { SearchTools } from '../../tools/search/SearchTools';
+import { AdaptiveScheduler, AgentPriority, AgentScheduleInfo, WorkflowConfig, WorkflowStep } from '../../core/coordinator/AdaptiveScheduler';
 
 /**
  * 工作流配置
@@ -63,120 +64,101 @@ export function createAdaptiveWorkflow(
     numAgents: Object.keys(agents).length
   });
   
-  // 创建状态图
-  const workflow = new StateGraph({
-    channels: {
-      // 输入/输出渠道
-      input: {
-        value: null,
-        default: () => ({
-          keyword: "",
-          options: {
-            includeDetails: !mergedConfig.fastMode,
-            fast: mergedConfig.fastMode
-          }
-        })
-      },
-      
-      // 节点结果渠道
-      keywordDiscovery: { value: null },
-      journeySimulation: { value: null },
-      contentAnalysis: { value: null },
-      reportGeneration: { value: null },
-      
-      // 元数据渠道
-      executionMetadata: {
-        value: null,
-        default: () => ({
-          startTime: Date.now(),
-          currentNode: 'start',
-          errors: [],
-          completedNodes: [],
-          nodeDecisions: {}
-        })
-      },
-      
-      // 最终输出
-      output: { value: null }
+  // 1. 构建Agent调度信息
+  const agentInfos: AgentScheduleInfo[] = [
+    {
+      agentId: 'keywordAgent',
+      priority: mergedConfig.prioritizeKeywordDiscovery ? AgentPriority.HIGH : AgentPriority.NORMAL,
+      estimatedDuration: 1000,
+      resourceIntensity: 0.3,
+      dependencies: [],
+      canExecuteParallel: false,
+      tags: ['keyword']
+    },
+    {
+      agentId: 'journeyAgent',
+      priority: AgentPriority.NORMAL,
+      estimatedDuration: 1200,
+      resourceIntensity: 0.4,
+      dependencies: ['keywordAgent'],
+      canExecuteParallel: false,
+      tags: ['journey']
+    },
+    {
+      agentId: 'contentAgent',
+      priority: AgentPriority.NORMAL,
+      estimatedDuration: 1500,
+      resourceIntensity: 0.5,
+      dependencies: ['journeyAgent'],
+      canExecuteParallel: false,
+      tags: ['content']
+    },
+    {
+      agentId: 'reportAgent',
+      priority: AgentPriority.NORMAL,
+      estimatedDuration: 800,
+      resourceIntensity: 0.2,
+      dependencies: ['contentAgent'],
+      canExecuteParallel: false,
+      tags: ['report']
     }
-  });
-  
-  // 注册Agent节点
-  for (const [name, agent] of Object.entries(agents)) {
-    const priority = agent instanceof KeywordAgent && mergedConfig.prioritizeKeywordDiscovery ? 1 : 2;
-    
-    workflow.addNode(name, createAgentNode(agent));
-    
-    logger.debug(`Agent registered: ${name}`, { priority });
-  }
+  ];
 
-  // 定义工作流程
-  
-  // 添加开始节点
-  workflow.addNode('start', new RunnableLambda({
-    func: (state: any) => {
-      return {
-        ...state,
-        executionMetadata: {
-          ...state.executionMetadata,
-          startTime: Date.now(),
-          currentNode: 'start'
-        }
-      };
-    }
-  }));
-  
-  // 添加结束节点
-  workflow.addNode('end', new RunnableLambda({
-    func: (state: any) => {
-      // 计算执行时间
-      const executionTime = Date.now() - state.executionMetadata.startTime;
-      
-      // 处理各Agent结果，生成最终输出
-      return {
-        ...state,
-        output: {
-          keyword: state.input.keyword,
-          keywordDiscovery: state.keywordDiscovery,
-          journeySimulation: state.journeySimulation,
-          contentAnalysis: state.contentAnalysis,
-          reportGeneration: state.reportGeneration,
-          executionMetadata: {
-            ...state.executionMetadata,
-            endTime: Date.now(),
-            totalExecutionTimeMs: executionTime
-          },
-          finalReport: state.reportGeneration || {}
-        }
-      };
-    }
-  }));
-  
-  // 设置边界和决策逻辑
-  workflow.setEntryPoint('start');
-  
-  // 从start到关键词发现
-  workflow.addEdge('start', 'keywordAgent');
-  
-  // 关键词发现到客户旅程
-  workflow.addEdge('keywordAgent', 'journeyAgent');
-  
-  // 客户旅程到内容分析
-  workflow.addEdge('journeyAgent', 'contentAgent');
-  
-  // 内容分析到报告生成
-  workflow.addEdge('contentAgent', 'reportAgent');
-  
-  // 报告生成到结束
-  workflow.addEdge('reportAgent', 'end');
-  
-  // 结束节点需要连接到END标记，表示工作流结束
-  workflow.addEdge('end', END);
-  
-  // 编译工作流
+  // 2. 构建工作流步骤
+  const steps: WorkflowStep[] = [
+    { agentId: 'keywordAgent', stepId: 'step_keyword', status: 'pending' },
+    { agentId: 'journeyAgent', stepId: 'step_journey', status: 'pending' },
+    { agentId: 'contentAgent', stepId: 'step_content', status: 'pending' },
+    { agentId: 'reportAgent', stepId: 'step_report', status: 'pending' }
+  ];
+
+  // 3. 构建工作流配置
+  const workflowConfig: WorkflowConfig = {
+    workflowId: 'adaptive_keyword_workflow',
+    steps,
+    onComplete: (result) => logger.info('自适应工作流完成', { result }),
+    onError: (error) => logger.error('自适应工作流出错', { error })
+  };
+
+  // 4. 创建调度器并注册Agent和工作流
+  const scheduler = new AdaptiveScheduler({
+    maxConcurrentAgents: mergedConfig.maxConcurrentAgents
+  });
+  agentInfos.forEach(info => scheduler.registerAgent(info));
+  scheduler.registerWorkflow(workflowConfig);
+
+  // 5. 返回调度器和执行方法
   return {
-    graph: workflow,
-    config: mergedConfig
+    scheduler,
+    config: mergedConfig,
+    async run(initialInput: any) {
+      // 绑定Agent执行逻辑
+      const agentMap = {
+        keywordAgent: agents.keywordAgent,
+        journeyAgent: agents.journeyAgent,
+        contentAgent: agents.contentAgent,
+        reportAgent: agents.reportAgent
+      };
+      scheduler.setAgentExecutor(async (agentId, context) => {
+        const agent = agentMap[agentId as keyof typeof agentMap];
+        if (!agent) throw new Error(`Agent not found: ${agentId}`);
+        // 合并前序结果，确保ReportAgent等能拿到keyword和所有中间结果
+        let agentInput = context;
+        if (context && context.results) {
+          agentInput = { ...context, ...context.results };
+        }
+        // 确保 input 字段存在且有 keyword
+        if (!agentInput.input) {
+          agentInput.input = {};
+        }
+        if (!agentInput.input.keyword && agentInput.keyword) {
+          agentInput.input.keyword = agentInput.keyword;
+        }
+        return await agent.execute(agentInput);
+      });
+      // 执行自适应工作流
+      return await scheduler.executeWorkflow('adaptive_keyword_workflow', initialInput);
+    }
   };
 }
 

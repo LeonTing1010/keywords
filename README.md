@@ -170,31 +170,37 @@ neuralminer/
 4. **增强型Agent基类** (EnhancedBaseAgent): 集成状态共享、错误恢复和缓存能力的高级Agent基类
 5. **专业Agent实现**: 包括关键词Agent、旅程Agent、内容Agent和报告Agent
 
-### 自适应工作流
+### 专业Agent职责
 
-系统支持基于LangGraph的自适应工作流定义，可以根据实时状态和资源动态调整执行路径：
+NeuralMiner系统由四个专业Agent协作完成需求挖掘与价值验证:
 
-```typescript
-// 创建自适应工作流示例
-const workflow = createAdaptiveWorkflow(
-  {
-    keywordAgent,
-    journeyAgent,
-    contentAgent,
-    reportAgent
-  },
-  {
-    fastMode: true,
-    maxConcurrentAgents: 3,
-    prioritizeKeywordDiscovery: true
-  }
-);
+1. **关键词Agent (需求发现专家)**: 
+   - 实现高级关键词挖掘策略，超越简单自动补全功能
+   - 挖掘多个搜索引擎和平台的搜索模式
+   - 识别特定领域的热门问题和新兴需求
+   - 量化每个潜在需求的搜索量和竞争指标
+   - 将需求分类为清晰的分类体系，方便组织和分析
 
-// 执行工作流
-const result = await workflow.graph.invoke({
-  keyword: "人工智能应用"
-});
-```
+2. **旅程Agent (用户行为分析专家)**:
+   - 模拟具有不同搜索行为和偏好的多样化用户角色
+   - 映射用户从初始查询到最终行动或放弃的完整旅程
+   - 识别搜索旅程中的摩擦点和决策分支
+   - 从搜索优化和放弃模式中提取隐含需求
+   - 分析跨设备和跨平台的搜索连续性
+
+3. **内容Agent (解决方案评估专家)**:
+   - 对搜索结果进行深度内容缺口分析
+   - 评估解决方案的全面性、权威性和可访问性
+   - 识别信息质量问题(过时、不完整、矛盾)
+   - 根据用户需求维度评估竞争对手解决方案
+   - 计算客观需求满足度分数并提供可信度指标
+
+4. **报告Agent (机会策略专家)**:
+   - 整合和综合所有其他Agent的洞察
+   - 基于价值潜力和执行可行性对机会进行优先级排序
+   - 设计具有最小可行功能和明确成功指标的MVP解决方案
+   - 创建包含时间/资源估计的验证路线图
+   - 为每个机会生成有证据支持的商业案例
 
 ## 技术特点
 
@@ -399,25 +405,6 @@ const response = await agentLLM.call([
 - [API文档](docs/api/index.md)
 - [命令行使用](docs/usage/cli.md)
 
-## 高级配置
-
-通过 .env 文件可以进行高级配置：
-
-```
-# LLM配置
-OPENAI_API_KEY=sk-your-key
-MODEL_NAME=gpt-4-turbo
-
-# 系统配置
-MAX_CONCURRENT_AGENTS=5
-ENABLE_CACHING=true
-RECOVERY_MAX_RETRIES=3
-
-# 日志配置
-LOG_LEVEL=info
-ENABLE_FILE_LOGGING=true
-```
-
 ## 贡献
 
 欢迎贡献代码、报告问题或提出新功能建议。请参考[贡献指南](CONTRIBUTING.md)。
@@ -425,45 +412,3 @@ ENABLE_FILE_LOGGING=true
 ## 许可
 
 本项目采用 MIT 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
-
-## 命令行使用
-
-### 基本用法
-
-NeuralMiner现在提供了持续运行模式，可以连续分析多个关键词而无需重启服务：
-
-```bash
-# 启动交互式分析服务
-./analyze.sh chat
-
-# 启动后可以连续分析多个关键词，不会退出服务
-```
-
-所有脚本已经整理到了scripts目录下的不同分类中，主要包括：
-
-- `scripts/analyze/` - 关键词分析相关脚本
-- `scripts/debug/` - 调试工具脚本
-- `scripts/test/` - 测试脚本
-- `scripts/utils/` - 实用工具脚本
-- `scripts/monitor/` - 监控和日志脚本
-
-为了便于访问，项目提供了以下主要入口点：
-
-- `./analyze.sh` - 关键词分析工具
-- `./debug.sh` - 调试工具
-- `./test.sh` - 测试工具
-
-### 整理脚本
-
-如果您添加了新的脚本，可以使用整理工具将它们归类：
-
-```bash
-# 整理所有散落的脚本到对应目录
-./scripts/organize-scripts.sh
-```
-
-### 综合启动脚本
-
-全新的综合启动脚本提供了更直观、更友好的命令行体验：
-
-```

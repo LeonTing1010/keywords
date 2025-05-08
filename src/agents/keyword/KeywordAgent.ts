@@ -1,5 +1,20 @@
 /**
  * KeywordAgent.ts - 关键词分析Agent
+ * 
+ * 关键词Agent (需求发现专家)
+ * 
+ * 核心职责:
+ * 1. 实现高级关键词挖掘策略，超越简单自动补全功能
+ * 2. 挖掘多个搜索引擎和平台的搜索模式
+ * 3. 识别特定领域的热门问题和新兴需求
+ * 4. 量化每个潜在需求的搜索量和竞争指标
+ * 5. 将需求分类为清晰的分类体系，方便组织和分析
+ * 
+ * 主要功能:
+ * - 通过多种方法发现相关关键词和长尾关键词
+ * - 分析关键词中隐含的未满足需求
+ * - 评估每个潜在需求的价值和可信度
+ * - 提供关键词领域的整体市场洞察
  */
 import { BaseAgent, BaseAgentConfig } from '../base/BaseAgent';
 import { GraphStateType } from '../../types/schema';
@@ -105,9 +120,26 @@ export class KeywordAgent extends BaseAgent<GraphStateType, Partial<GraphStateTy
         logger.warn('SearchTools was not initialized, creating default instance');
       }
       
-      // 使用关键词发现工具获取关键词
+      // 使用字母前缀策略发现更多相关关键词
       const discoveryTool = this.searchTools.getKeywordDiscoveryTool();
-      const result = await discoveryTool.invoke({ keyword, maxResults: this.maxKeywords });
+      const alphabet = 'ab';
+      let allResults: string[] = [];
+      
+      // 为每个字母前缀获取关键词
+      for (const letter of alphabet) {
+        const prefixKeyword = `${keyword} ${letter}`;
+        const result = await discoveryTool.invoke({ keyword: prefixKeyword, maxResults: Math.ceil(this.maxKeywords / 26) });
+        try {
+          const keywords = JSON.parse(result) as string[];
+          allResults.push(...keywords);
+        } catch (error) {
+          logger.warn('Failed to parse keywords for prefix', { prefix: letter, error });
+        }
+      }
+      
+      // 去重并限制结果数量
+      const uniqueResults = [...new Set(allResults)].slice(0, this.maxKeywords);
+      const result = JSON.stringify(uniqueResults);
       
       try {
         // 解析工具返回的JSON

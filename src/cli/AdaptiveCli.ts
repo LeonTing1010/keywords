@@ -106,7 +106,7 @@ async function main() {
     // 创建多搜索引擎工具实例
     const multiSearchTools = new MultiSearchTools({
       enabledEngines: process.env.ENABLED_ENGINES ? 
-        process.env.ENABLED_ENGINES.split(',') : ['baidu', 'google'],
+        process.env.ENABLED_ENGINES.split(',') : ['baidu'],
       defaultEngine: process.env.DEFAULT_ENGINE || 'baidu',
       proxyServer: process.env.PROXY_SERVER
     });
@@ -152,37 +152,19 @@ async function main() {
     );
     
     // 执行工作流
-    const compiledGraph = workflow.graph.compile();
-    const result = await compiledGraph.invoke({
-      input: {
-        keyword: argv.keyword,
-        options: {
-          includeDetails: !argv.fast,
-          fast: argv.fast,
-          maxKeywords: 30,
-          maxRetries: 3
-        }
+    const result = await workflow.run({
+      keyword: argv.keyword,
+      options: {
+        includeDetails: !argv.fast,
+        fast: argv.fast,
+        maxKeywords: 30,
+        maxRetries: 3
       }
     });
     
     // 输出结果
     const duration = (Date.now() - startTime) / 1000;
     logger.info(`分析完成! 用时: ${duration.toFixed(2)}秒`);
-    
-    // 保存结果到文件
-    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-    const filename = `${argv.keyword.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.${argv.format}`;
-    const outputPath = path.join(argv.output, filename);
-    
-    let content = '';
-    if (argv.format === 'json') {
-      content = JSON.stringify(result.finalReport, null, 2);
-    } else {
-      content = result.finalReport?.markdownContent || '# 分析报告\n\n生成报告时出现错误';
-    }
-    
-    fs.writeFileSync(outputPath, content);
-    logger.info(`报告已保存至: ${outputPath}`);
     
     // 关闭搜索引擎资源
     await searchEngine.close();

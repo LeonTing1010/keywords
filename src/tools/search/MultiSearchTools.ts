@@ -83,7 +83,7 @@ export class MultiSearchTools {
     this.defaultEngine = config.defaultEngine || 'baidu';
     
     // 确定要启用的引擎
-    const enabledEngines = config.enabledEngines || ['baidu', 'web'];
+    const enabledEngines = config.enabledEngines || ['baidu'];
     
     // 创建每个引擎实例
     for (const engineType of enabledEngines) {

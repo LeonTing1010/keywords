@@ -1,6 +1,19 @@
 /**
- * ReportAgent.ts - 分析报告生成Agent
- * 负责收集其他Agent的结果并生成最终分析报告
+ * 报告Agent (机会策略专家)
+ * 
+ * 核心职责:
+ * 1. 整合和综合所有其他Agent的洞察
+ * 2. 基于价值潜力和执行可行性对机会进行优先级排序
+ * 3. 设计具有最小可行功能和明确成功指标的MVP解决方案
+ * 4. 创建包含时间/资源估计的验证路线图
+ * 5. 为每个机会生成有证据支持的商业案例
+ * 
+ * 主要功能:
+ * - 汇总所有Agent的分析结果并提取核心洞察
+ * - 对机会进行价值和可行性评估与排序
+ * - 生成具体的MVP方案和验证策略
+ * - 提供清晰的后续行动建议和路线图
+ * - 以多种格式输出综合分析报告(Markdown/JSON)
  */
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { BaseAgent, BaseAgentConfig } from '../base/BaseAgent';
@@ -176,7 +189,8 @@ ${contentAnalysis?.marketInsights?.map(insight =>
         });
         
         // 生成一个基本的失败报告，而不是直接抛出错误
-        return `# 分析报告\n\n生成报告时出现错误：${llmError instanceof Error ? llmError.message : String(llmError)}\n\n## 调试信息\n\n- 关键词: ${keyword}\n- 时间: ${new Date().toISOString()}\n- 数据统计: 关键词发现(${keywordDiscovery?.discoveredKeywords?.length || 0}), 痛点(${journeySimulation?.painPoints?.length || 0}), 未满足需求(${contentAnalysis?.unmetNeeds?.length || 0})`;
+        let failContent = `# 分析报告\n\n生成报告时出现错误：${llmError instanceof Error ? llmError.message : String(llmError)}\n\n## 调试信息\n\n- 关键词: {keyword}\n- 时间: ${new Date().toISOString()}\n- 数据统计: 关键词发现(${keywordDiscovery?.discoveredKeywords?.length || 0}), 痛点(${journeySimulation?.painPoints?.length || 0}), 未满足需求(${contentAnalysis?.unmetNeeds?.length || 0})`;
+        return failContent.replace(/\{keyword\}/g, keyword);
       }
     } catch (error) {
       // 捕获一般错误
@@ -186,7 +200,8 @@ ${contentAnalysis?.marketInsights?.map(insight =>
       });
       
       // 返回简单错误报告，而不是抛出错误
-      return `# 分析报告\n\n生成报告时出现错误：${error instanceof Error ? error.message : String(error)}\n\n请联系技术支持获取更多信息。`;
+      let errorContent = `# 分析报告\n\n生成报告时出现错误：${error instanceof Error ? error.message : String(error)}\n\n请联系技术支持获取更多信息。\n\n关键词: {keyword}`;
+      return errorContent.replace(/\{keyword\}/g, state.input?.keyword || 'unknown');
     }
   }
   
@@ -289,13 +304,8 @@ ${contentAnalysis?.marketInsights?.map(insight =>
       // 写入文件
       await fs.writeFile(filePath, content, 'utf8');
       
-      // 额外保存一份固定名称的最新报告，方便查看
-      const testFilePath = path.join(this.outputDir, `test_${timestamp.substring(0, 10)}.${extension}`);
-      await fs.writeFile(testFilePath, content, 'utf8');
-      
       logger.info('Report saved successfully', { 
         filePath, 
-        testFilePath,
         contentLength: content.length,
         format: this.format
       });
@@ -372,9 +382,15 @@ ${contentAnalysis?.marketInsights?.map(insight =>
           error: generationError instanceof Error ? generationError.message : String(generationError) 
         });
         // 防止整个流程因报告生成失败而中断
-        reportContent = this.format === 'markdown' 
-          ? `# 分析报告\n\n生成报告时出现错误: ${generationError instanceof Error ? generationError.message : String(generationError)}`
-          : JSON.stringify({ error: `Generation error: ${generationError instanceof Error ? generationError.message : String(generationError)}` });
+        if (this.format === 'markdown') {
+          let fallbackContent = `# 分析报告\n\n生成报告时出现错误: {keyword}`;
+          if (generationError instanceof Error) {
+            fallbackContent = `# 分析报告\n\n生成报告时出现错误: ${generationError.message}\n\n关键词: {keyword}`;
+          }
+          reportContent = fallbackContent.replace(/\{keyword\}/g, keyword);
+        } else {
+          reportContent = JSON.stringify({ error: `Generation error: ${generationError instanceof Error ? generationError.message : String(generationError)}` });
+        }
       }
       
       // 保存报告
@@ -432,12 +448,14 @@ ${contentAnalysis?.marketInsights?.map(insight =>
       });
       
       // 返回错误状态，而不是抛出错误，避免整个流程中断
+      let execErrorContent = `# 分析报告\n\n执行过程中出现错误: {keyword}`;
+      if (error instanceof Error) {
+        execErrorContent = `# 分析报告\n\n执行过程中出现错误: ${error.message}\n\n关键词: {keyword}`;
+      }
       return {
         reportGeneration: {
           keyword: state.input?.keyword || 'unknown',
-          reportContent: this.format === 'markdown' 
-            ? `# 分析报告\n\n执行过程中出现错误: ${error instanceof Error ? error.message : String(error)}` 
-            : JSON.stringify({ error: `Execution error: ${error instanceof Error ? error.message : String(error)}` }),
+          reportContent: execErrorContent.replace(/\{keyword\}/g, state.input?.keyword || 'unknown'),
           reportPath: `${this.outputDir}/execution_error_${Date.now()}.${this.format === 'markdown' ? 'md' : 'json'}`,
           format: this.format,
           metrics: {
