@@ -6,6 +6,7 @@
   "scripts": {
     "analyze": "ts-node src/presentation/cli/Cli.ts",
     "analyze:langgraph": "ts-node src/presentation/cli/LangGraphCli.ts",
+    "analyze:adaptive": "ts-node src/cli/AdaptiveCli.ts",
     "debug": "node --inspect-brk -r ts-node/register src/presentation/cli/Cli.ts",
     "debug:langgraph": "node --inspect-brk -r ts-node/register src/presentation/cli/LangGraphCli.ts",
     "test": "jest",
@@ -27,6 +28,7 @@
     "@types/node": "^18.0.0",
     "@types/node-fetch": "^2.6.12",
     "@types/pino-multi-stream": "^5.1.6",
+    "axios": "^1.9.0",
     "dotenv": "^16.5.0",
     "https-proxy-agent": "^7.0.6",
     "langchain": "^0.1.9",

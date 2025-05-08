@@ -1,12 +1,12 @@
-# NeedMiner
+# NeuralMiner
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="NeedMiner Logo" width="200"/>
+  <img src="docs/assets/logo.png" alt="NeuralMiner Logo" width="200"/>
 </p>
 
 <p align="center">
-  <b>未满足需求挖掘与价值验证系统</b><br>
-  <i>发现真实存在但尚未被解决的高价值用户需求</i>
+  <b>智能多Agent协作需求挖掘与价值验证系统</b><br>
+  <i>强大的多Agent协作机制，发现真实存在但尚未被解决的高价值用户需求</i>
 </p>
 
 <p align="center">
@@ -23,11 +23,13 @@
 
 ## 核心价值
 
-NeedMiner 是一个未满足需求挖掘与价值验证系统。通过融合搜索引擎数据挖掘与大语言模型的认知分析能力，NeedMiner能够:
+NeuralMiner 是一个基于自适应多Agent协作架构的需求挖掘与价值验证系统。通过融合自适应调度、状态共享和智能恢复机制，NeuralMiner能够:
 
+- **建立智能、高效、可靠的多Agent协作生态**，支持复杂协同任务的高效执行
 - **发现互联网上尚未被满足的真实用户需求**，识别内容空白与市场机会
 - **分析需求的真实性与价值**，找出具有长尾价值的潜在商机
 - **提供简化解决方案与冷启动MVP方案**，快速验证需求价值
+- **智能应对系统错误与资源限制**，确保在复杂环境中的可靠性
 
 ## 主要功能
 
@@ -47,76 +49,163 @@ NeedMiner 是一个未满足需求挖掘与价值验证系统。通过融合搜�
 
 为每个未满足需求提供简化解决方案和冷启动MVP方案，包括具体特性、验证指标、时间和资源估计。
 
+### 🔄 自适应多Agent协作
+
+基于系统资源和任务优先级动态调整工作流执行，实现高效的多Agent协作和资源优化利用。
+
+### 🔁 智能错误恢复
+
+内置错误识别和恢复策略，在Agent执行失败时自动应用最佳恢复策略，确保系统可靠性。
+
+### 🔄 状态共享与缓存
+
+强大的Agent间状态共享机制，避免重复计算，提高整体效率，实现更智能的协作决策。
+
 ## 系统架构
 
-NeedMiner 采用基于多Agent协作的模块化设计，各专业化Agent之间通过标准化接口和统一协调器进行协作。
+NeuralMiner 采用基于自适应多Agent协作的先进架构设计，包含状态共享、恢复管理和自适应调度三大核心能力。
 
 ```
-┌────────────────────────────────────────────────────┐
-│               AgentCoordinator                     │
-│        (Agent协调与任务编排中心)                     │
-└───────┬─────────────────┬───────────────┬──────────┘
-        │                 │               │        
-        ▼                 ▼               ▼        
-┌────────────────┐ ┌────────────────┐ ┌────────────────┐
-│ KeywordAgent   │ │ JourneyAgent   │ │ ContentAgent   │
-│ (关键词挖掘)   │ │ (用户旅程模拟) │ │ (内容分析)     │
-└────────────────┘ └────────────────┘ └────────────────┘
-        │                 │               │
-        └─────────────────┼───────────────┘
-                          ▼
-                 ┌─────────────────┐
-                 │  ReportAgent    │
-                 │  (报告生成)    │
-                 └─────────────────┘
-                          │
-                          ▼
-             ┌─────────────────────────────────┐
-             │           ToolRegistry           │
-             │    (工具注册与共享能力中心)      │
-             └─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       工作流管理层                               │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │  自适应关键词   │  │     快速分析    │  │    自定义工作流  │  │
+│  │     工作流      │  │     工作流      │  │      模板       │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│                        核心协调层                                │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │   自适应调度器  │  │  状态注册中心   │  │   恢复管理器    │  │
+│  │AdaptiveScheduler│  │  StateRegistry  │  │ RecoveryManager │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│                       增强型Agent层                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │   关键词Agent   │  │   旅程Agent     │  │   内容Agent     │  │
+│  │  KeywordAgent   │  │  JourneyAgent   │  │  ContentAgent   │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+│                                                                  │
+│  ┌─────────────────┐  ┌─────────────────┐                       │
+│  │   报告Agent     │  │   其他Agent     │                       │
+│  │  ReportAgent    │  │   OtherAgents   │                       │
+│  └─────────────────┘  └─────────────────┘                       │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│                        基础设施层                                │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │    日志系统     │  │    搜索引擎     │  │    存储系统     │  │
+│  │     Logger      │  │  SearchEngine   │  │    Storage      │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+## 目录结构
+
+neuralminer/
+├── src/
+│   ├── agents/                # 所有Agent实现
+│   │   ├── base/              # 基础Agent抽象类和增强Agent基类
+│   │   ├── keyword/           # 关键词Agent
+│   │   ├── journey/           # 用户旅程Agent  
+│   │   ├── content/           # 内容分析Agent
+│   │   └── report/            # 报告生成Agent
+│   │
+│   ├── core/                  # 核心服务与功能
+│   │   ├── coordinator/       # Agent协调器和恢复管理
+│   │   ├── registry/          # 状态注册中心
+│   │   ├── llm/               # LLM服务封装
+│   │   └── config/            # 系统配置
+│   │
+│   ├── graphs/                # LangGraph工作流定义
+│   │   ├── keyword-analysis/  # 关键词分析工作流
+│   │   ├── fast-analysis/     # 快速分析工作流
+│   │   └── custom/            # 自定义工作流模板
+│   │
+│   ├── tools/                 # 共享工具集
+│   │   ├── search/            # 搜索相关工具
+│   │   ├── analysis/          # 分析工具
+│   │   └── utils/             # 通用工具
+│   │
+│   ├── infra/                 # 基础设施
+│   │   ├── search/            # 搜索引擎适配器
+│   │   ├── storage/           # 存储服务
+│   │   ├── logger/            # 日志系统
+│   │   └── cache/             # 缓存机制
+│   │
+│   ├── types/                 # 全局类型定义
+│   │
+│   ├── api/                   # API接口
+│   │   ├── routes/            # API路由
+│   │   ├── controllers/       # 控制器
+│   │   └── middleware/        # 中间件
+│   │
+│   └── cli/                   # 命令行界面
+│       ├── commands/          # CLI命令
+│       └── formatters/        # 输出格式化
+│
+├── docs/                      # 文档
+│   ├── api/                   # API文档
+│   ├── architecture/          # 架构文档
+│   ├── assets/                # 资源文件
+│   ├── usage/                 # 使用指南
+│   └── development/           # 开发指南
+│
+├── scripts/                   # 实用脚本
+├── examples/                  # 使用示例
+├── tests/                     # 测试
+├── dist/                      # 构建输出
+├── .env.example               # 环境变量示例
+└── README.md                  # 项目说明
 
 ### 核心组件
 
-1. **Agent协调器** (AgentCoordinator): 管理Agent生命周期、分配任务、处理通信
-2. **工具注册中心** (ToolRegistry): 提供共享工具和能力，供各Agent调用
-3. **关键词Agent** (KeywordAgent): 负责关键词发现和需求挖掘
-4. **旅程Agent** (JourneyAgent): 负责用户搜索行为模拟和路径分析
-5. **内容Agent** (ContentAgent): 负责内容质量评估和未满足需求识别
-6. **报告Agent** (ReportAgent): 负责整合分析结果，生成最终报告
+1. **自适应调度器** (AdaptiveScheduler): 基于资源和优先级动态调整Agent执行，优化系统资源利用
+2. **状态注册中心** (StateRegistry): 提供Agent间状态共享和缓存机制，避免重复计算
+3. **恢复管理器** (RecoveryManager): 提供智能错误识别和恢复策略，确保系统可靠性
+4. **增强型Agent基类** (EnhancedBaseAgent): 集成状态共享、错误恢复和缓存能力的高级Agent基类
+5. **专业Agent实现**: 包括关键词Agent、旅程Agent、内容Agent和报告Agent
 
-### 多Agent工作流
+### 自适应工作流
 
-系统支持多种工作流定义，可以灵活配置Agent协作方式，主要包括：
+系统支持基于LangGraph的自适应工作流定义，可以根据实时状态和资源动态调整执行路径：
 
-1. **标准工作流** (`keywordAnalysis`): 完整分析流程，包括关键词挖掘、用户旅程模拟、内容分析和报告生成
-2. **快速工作流** (`keywordAnalysisFast`): 简化版分析流程，适合快速探索和分析
-
-工作流示例：
 ```typescript
-{
-  name: 'keywordAnalysis',
-  steps: [
-    { name: 'discoverKeywords', agentId: 'keywordAgent', ... },
-    { name: 'simulateJourney', agentId: 'journeyAgent', ... },
-    { name: 'analyzeContent', agentId: 'contentAgent', ... },
-    { name: 'generateReport', agentId: 'reportAgent', ... },
-  ],
-  parallelSteps: [['analyzeContent', 'analyzeTrends']]
-}
+// 创建自适应工作流示例
+const workflow = createAdaptiveWorkflow(
+  {
+    keywordAgent,
+    journeyAgent,
+    contentAgent,
+    reportAgent
+  },
+  {
+    fastMode: true,
+    maxConcurrentAgents: 3,
+    prioritizeKeywordDiscovery: true
+  }
+);
+
+// 执行工作流
+const result = await workflow.graph.invoke({
+  keyword: "人工智能应用"
+});
 ```
 
 ## 技术特点
 
-- **多Agent协作架构**：各专业化Agent通过标准化接口协作，高度模块化与可扩展
-- **能力工具化**：系统核心能力以工具形式注册，便于跨Agent调用和能力复用
-- **需求发现驱动**：专注于发现和验证真实的未满足需求，而非仅优化已有内容
-- **大模型分析**：利用大语言模型分析内容质量和需求满足度，提供精准洞察
-- **标准化数据交换**：各Agent间通过统一的数据格式交换信息，确保系统可维护性
-- **并行处理能力**：支持工作流中的并行步骤执行，提高分析效率
-- **容错与重试机制**：内置智能重试策略，提高系统稳定性
-- **全面日志系统**：多级别日志记录，便于追踪分析流程和调试
+- **自适应多Agent协作**: 基于资源负载和优先级动态调整Agent执行，实现高效协作
+- **状态共享与缓存**: 高效的Agent间数据共享机制，避免重复计算，提高整体效率
+- **智能错误恢复**: 自动识别错误类型并应用最佳恢复策略，确保系统稳定性
+- **LangGraph工作流支持**: 基于LangGraph构建高效工作流，支持复杂条件路由和状态管理
+- **资源自适应优化**: 动态监控系统资源，优化并行度和执行顺序
+- **高度可扩展性**: 模块化架构设计，易于扩展新的Agent和功能
+- **统一数据交换格式**: 标准化Agent间数据交换，确保系统一致性和可维护性
+- **全面日志系统**: 多级别日志记录和监控，便于追踪系统状态和调试
 
 ## 快速开始
 
@@ -124,8 +213,8 @@ NeedMiner 采用基于多Agent协作的模块化设计，各专业化Agent之间
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/needminer.git
-cd needminer
+git clone https://github.com/yourusername/neuralminer.git
+cd neuralminer
 
 # 安装依赖
 npm install
@@ -135,166 +224,67 @@ cp .env.example .env
 # 编辑.env文件，添加你的API密钥
 ```
 
-### 新版CLI工具使用
+### 依赖更新
+
+为确保兼容性，可以使用提供的脚本更新依赖：
 
 ```bash
-# 分析单个关键词
+# 更新到兼容版本的依赖
+./update-dependencies.sh
+```
+
+### 使用示例
+
+```bash
+# 基本分析
 npm run analyze --keyword "智能家居控制系统"
 
-# 快速模式
-npm run analyze --keyword "远程医疗服务" --fast
+# 使用自适应工作流进行分析
+./analyze-adaptive.sh "人工智能应用" --concurrent 3
 
-# 包含详细分析
-npm run analyze --keyword "可持续时尚" --details
+# 快速模式（跳过用户旅程模拟）
+./analyze-adaptive.sh "区块链技术" --fast
 
-# 批量分析多个关键词
-npm run batch --keywords "智能家居,人工智能,区块链" --concurrent 2
-
-# 从文件批量分析
-npm run batch --file keywords.txt --fast
-
-# 启用并行执行和详细日志
-npm run analyze --keyword "元宇宙应用" --parallel --verbose
-
-# 指定输出目录
-npm run analyze --keyword "低代码平台" --output ./reports
+# 优先关键词发现
+./analyze-adaptive.sh "元宇宙" --prioritize-discovery
 ```
 
-### 旧版命令行参数（向下兼容）
+### 高级配置
 
-```bash
-# 基本用法（百度搜索引擎）
-npm run intent "智能家居控制系统"
-
-# 使用谷歌搜索引擎
-npm run intent "远程医疗服务" --engine google
-
-# 禁用用户旅程模拟
-npm run intent "可持续时尚" --no-journey-sim
-
-# 使用代理服务器
-npm run intent "虚拟现实课程" --proxy http://127.0.0.1:7890
-
-# 生成详细的未满足需求分析报告
-npm run intent "电动汽车充电解决方案" --verbose
-```
-
-### 主要命令行参数
+通过 .env 文件可以进行高级配置：
 
 ```
-搜索引擎选项:
-  --engine, -e <引擎名称>     使用指定的搜索引擎(默认: google)
-                            可选值: baidu, google
-  --proxy, -p <代理地址>     使用指定的代理服务器
-  --output, -o <文件路径>    指定输出文件路径
+# LLM配置
+OPENAI_API_KEY=sk-your-key
+MODEL_NAME=gpt-4-turbo
 
-功能模块选项:
-  --no-journey-sim           禁用用户旅程模拟（默认开启）
-  --no-autocomplete          禁用自动补全增强（默认开启）
-  --parallel                 启用并行处理（默认关闭）
-  --fast                     使用快速模式（简化分析流程）
-  
-输出选项:
-  --format <格式>            输出格式(json, markdown，默认: markdown)
-  --details                  在报告中显示分析过程详情
+# 系统配置
+MAX_CONCURRENT_AGENTS=5
+ENABLE_CACHING=true
+RECOVERY_MAX_RETRIES=3
 
-高级选项:
-  --model <模型名称>         指定LLM模型(默认: gpt-4)
-  --verbose                  输出详细日志
-  --log-level <级别>         设置日志级别(error, warn, info, debug, trace)
+# 日志配置
+LOG_LEVEL=info
+ENABLE_FILE_LOGGING=true
 ```
-
-## 编程接口
-
-系统提供了编程接口，方便集成到其他应用中：
-
-```typescript
-import { createAgentSystemDemo } from './application/services/AgentSystemDemo';
-
-// 创建多Agent系统实例
-const system = createAgentSystemDemo({
-  outputDir: './reports',
-  verbose: true,
-  parallelExecution: true
-});
-
-// 分析单个关键词
-const result = await system.analyzeKeyword('智能家居控制系统', {
-  fast: false,
-  includeDetails: true
-});
-
-// 批量分析关键词
-const results = await system.batchAnalyzeKeywords(
-  ['人工智能', '机器学习', '深度学习'],
-  { concurrentLimit: 2, fast: true }
-);
-```
-
-## 使用示例
-
-### 未满足需求发现与验证
-
-```bash
-npm run analyze --keyword "智能家居控制系统"
-```
-
-输出示例（部分）:
-```json
-{
-  "keyword": "智能家居控制系统",
-  "discoveredKeywords": [
-    "智能家居控制系统设计论文",
-    "智能家居控制系统哪个品牌好",
-    "智能家居控制系统软件设计",
-    "小爱同学智能家居控制系统"
-  ],
-  "unmetNeeds": [
-    {
-      "keyword": "智能家居控制系统mcu控制空调温控Python代码",
-      "isUnmetNeed": true,
-      "contentQuality": 0.4,
-      "reason": "搜索结果中虽然提到了智能空调温度控制系统和控制器，但没有具体涉及使用MCU控制空调温控的Python代码。这表明当前的内容完整性不足，无法全面覆盖用户需求。"
-    }
-  ],
-  "journeySimulation": {
-    "steps": [
-      {
-        "query": "智能家居控制系统",
-        "suggestions": ["智能家居控制系统app", "智能家居控制系统设计"],
-        "satisfaction": 0.65
-      }
-    ],
-    "painPoints": [
-      {
-        "description": "难以找到兼容多品牌设备的统一控制方案",
-        "severity": 8
-      }
-    ]
-  }
-}
-```
-
-### 批量分析报告
-
-```bash
-npm run batch --keywords "远程医疗,在线教育,虚拟办公" --concurrent 2
-```
-
-系统将生成多份分析报告，包含各关键词的未满足需求、用户旅程分析和市场机会评估。
 
 ## 文档
 
-- [系统架构](docs/architecture/architecture.md)
-- [多Agent架构设计](docs/architecture/multi-agent.md)
-- [工作流配置指南](docs/usage/workflow-config.md)
-- [API文档](docs/api/api.md)
-- [配置选项](docs/usage/configuration.md)
+详细文档请参考：
+
+- [架构概述](docs/architecture/architecture.md)
+- [Agent协作机制](docs/architecture/agent-collaboration.md)
+- [状态共享机制](docs/development/state-sharing.md)
+- [错误恢复策略](docs/development/error-recovery.md)
+- [自适应调度](docs/development/adaptive-scheduling.md)
+- [API文档](docs/api/index.md)
+- [命令行使用](docs/usage/cli.md)
+- [路线图](docs/development/RoadMap.md)
 
 ## 贡献
 
-欢迎贡献代码、报告问题或提出改进建议！请查看[贡献指南](CONTRIBUTING.md)了解更多信息。
+欢迎贡献代码、报告问题或提出新功能建议。请参考[贡献指南](CONTRIBUTING.md)。
 
-## 许可证
+## 许可
 
-本项目采用 [MIT 许可证](LICENSE)。
+本项目采用 MIT 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
