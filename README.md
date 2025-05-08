@@ -86,13 +86,36 @@ NeedMiner 采用基于多Agent协作的模块化设计，各专业化Agent之间
 5. **内容Agent** (ContentAgent): 负责内容质量评估和未满足需求识别
 6. **报告Agent** (ReportAgent): 负责整合分析结果，生成最终报告
 
+### 多Agent工作流
+
+系统支持多种工作流定义，可以灵活配置Agent协作方式，主要包括：
+
+1. **标准工作流** (`keywordAnalysis`): 完整分析流程，包括关键词挖掘、用户旅程模拟、内容分析和报告生成
+2. **快速工作流** (`keywordAnalysisFast`): 简化版分析流程，适合快速探索和分析
+
+工作流示例：
+```typescript
+{
+  name: 'keywordAnalysis',
+  steps: [
+    { name: 'discoverKeywords', agentId: 'keywordAgent', ... },
+    { name: 'simulateJourney', agentId: 'journeyAgent', ... },
+    { name: 'analyzeContent', agentId: 'contentAgent', ... },
+    { name: 'generateReport', agentId: 'reportAgent', ... },
+  ],
+  parallelSteps: [['analyzeContent', 'analyzeTrends']]
+}
+```
+
 ## 技术特点
 
 - **多Agent协作架构**：各专业化Agent通过标准化接口协作，高度模块化与可扩展
 - **能力工具化**：系统核心能力以工具形式注册，便于跨Agent调用和能力复用
 - **需求发现驱动**：专注于发现和验证真实的未满足需求，而非仅优化已有内容
 - **大模型分析**：利用大语言模型分析内容质量和需求满足度，提供精准洞察
-- **价值验证导向**：为每个发现的需求提供可行的MVP方案，快速验证商业价值
+- **标准化数据交换**：各Agent间通过统一的数据格式交换信息，确保系统可维护性
+- **并行处理能力**：支持工作流中的并行步骤执行，提高分析效率
+- **容错与重试机制**：内置智能重试策略，提高系统稳定性
 - **全面日志系统**：多级别日志记录，便于追踪分析流程和调试
 
 ## 快速开始
@@ -112,7 +135,32 @@ cp .env.example .env
 # 编辑.env文件，添加你的API密钥
 ```
 
-### 使用
+### 新版CLI工具使用
+
+```bash
+# 分析单个关键词
+npm run analyze --keyword "智能家居控制系统"
+
+# 快速模式
+npm run analyze --keyword "远程医疗服务" --fast
+
+# 包含详细分析
+npm run analyze --keyword "可持续时尚" --details
+
+# 批量分析多个关键词
+npm run batch --keywords "智能家居,人工智能,区块链" --concurrent 2
+
+# 从文件批量分析
+npm run batch --file keywords.txt --fast
+
+# 启用并行执行和详细日志
+npm run analyze --keyword "元宇宙应用" --parallel --verbose
+
+# 指定输出目录
+npm run analyze --keyword "低代码平台" --output ./reports
+```
+
+### 旧版命令行参数（向下兼容）
 
 ```bash
 # 基本用法（百度搜索引擎）
@@ -135,7 +183,7 @@ npm run intent "电动汽车充电解决方案" --verbose
 
 ```
 搜索引擎选项:
-  --engine, -e <引擎名称>     使用指定的搜索引擎(默认: baidu)
+  --engine, -e <引擎名称>     使用指定的搜索引擎(默认: google)
                             可选值: baidu, google
   --proxy, -p <代理地址>     使用指定的代理服务器
   --output, -o <文件路径>    指定输出文件路径
@@ -143,11 +191,12 @@ npm run intent "电动汽车充电解决方案" --verbose
 功能模块选项:
   --no-journey-sim           禁用用户旅程模拟（默认开启）
   --no-autocomplete          禁用自动补全增强（默认开启）
-  --autocomplete-engine <引擎> 指定自动补全使用的搜索引擎（默认与主搜索引擎相同）
+  --parallel                 启用并行处理（默认关闭）
+  --fast                     使用快速模式（简化分析流程）
   
 输出选项:
-  --format <格式>            输出格式(json, markdown, csv，默认: json)
-  --show-details             在报告中显示分析过程详情
+  --format <格式>            输出格式(json, markdown，默认: markdown)
+  --details                  在报告中显示分析过程详情
 
 高级选项:
   --model <模型名称>         指定LLM模型(默认: gpt-4)
@@ -155,12 +204,39 @@ npm run intent "电动汽车充电解决方案" --verbose
   --log-level <级别>         设置日志级别(error, warn, info, debug, trace)
 ```
 
+## 编程接口
+
+系统提供了编程接口，方便集成到其他应用中：
+
+```typescript
+import { createAgentSystemDemo } from './application/services/AgentSystemDemo';
+
+// 创建多Agent系统实例
+const system = createAgentSystemDemo({
+  outputDir: './reports',
+  verbose: true,
+  parallelExecution: true
+});
+
+// 分析单个关键词
+const result = await system.analyzeKeyword('智能家居控制系统', {
+  fast: false,
+  includeDetails: true
+});
+
+// 批量分析关键词
+const results = await system.batchAnalyzeKeywords(
+  ['人工智能', '机器学习', '深度学习'],
+  { concurrentLimit: 2, fast: true }
+);
+```
+
 ## 使用示例
 
 ### 未满足需求发现与验证
 
 ```bash
-npm run intent "智能家居控制系统"
+npm run analyze --keyword "智能家居控制系统"
 ```
 
 输出示例（部分）:
@@ -180,14 +256,38 @@ npm run intent "智能家居控制系统"
       "contentQuality": 0.4,
       "reason": "搜索结果中虽然提到了智能空调温度控制系统和控制器，但没有具体涉及使用MCU控制空调温控的Python代码。这表明当前的内容完整性不足，无法全面覆盖用户需求。"
     }
-  ]
+  ],
+  "journeySimulation": {
+    "steps": [
+      {
+        "query": "智能家居控制系统",
+        "suggestions": ["智能家居控制系统app", "智能家居控制系统设计"],
+        "satisfaction": 0.65
+      }
+    ],
+    "painPoints": [
+      {
+        "description": "难以找到兼容多品牌设备的统一控制方案",
+        "severity": 8
+      }
+    ]
+  }
 }
 ```
+
+### 批量分析报告
+
+```bash
+npm run batch --keywords "远程医疗,在线教育,虚拟办公" --concurrent 2
+```
+
+系统将生成多份分析报告，包含各关键词的未满足需求、用户旅程分析和市场机会评估。
 
 ## 文档
 
 - [系统架构](docs/architecture/architecture.md)
-- [未满足需求分析](docs/core/unmet-needs-analysis.md)
+- [多Agent架构设计](docs/architecture/multi-agent.md)
+- [工作流配置指南](docs/usage/workflow-config.md)
 - [API文档](docs/api/api.md)
 - [配置选项](docs/usage/configuration.md)
 

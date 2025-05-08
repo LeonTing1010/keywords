@@ -43,7 +43,7 @@ export interface SearchEngine {
    * Get search results
    */
   getSearchResults(keyword: string, options?: { maxResults?: number }): Promise<{ title: string; snippet: string; url: string }[]>;
-
+  
   /**
    * Close search engine
    */

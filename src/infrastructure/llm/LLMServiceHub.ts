@@ -60,6 +60,7 @@ export interface LLMServiceConfig {
   maxTokens?: number;
   mockMode?: boolean;
   apiEndpoint?: string;
+  mockResponses?: Record<string, any>; // Add mock responses property
 }
 
 /**
@@ -72,12 +73,12 @@ export class LLMServiceHub {
   private verbose: boolean = false;
   private defaultOptions: LLMOptions = {
     temperature: 0.7,
-    maxTokens: 2000,
-    model: 'gpt-4'
+    maxTokens: 4000
   };
   private temperature: number = 0.7;
   private maxTokens: number = 4000;
   private mockMode: boolean = false;
+  private mockResponses: Record<string, any> = {}; // Add mockResponses property
   
   /**
    * 创建LLM服务中心实例
@@ -89,6 +90,7 @@ export class LLMServiceHub {
     this.temperature = config.temperature || 0.7;
     this.maxTokens = config.maxTokens || 4000;
     this.mockMode = config.mockMode || (process.env.MOCK_LLM === 'true');
+    this.mockResponses = config.mockResponses || {}; // Initialize mockResponses
     
     // 根据模型类型选择API密钥
     let apiKey = config.apiKey;
@@ -605,71 +607,60 @@ export class LLMServiceHub {
  
   // Helper method to generate mock responses for testing
   private getMockResponse(prompt: string): any {
-    // Simple mock responses for different prompt types
-    if (prompt.includes('关键词') || prompt.includes('分类')) {
-      return {
-        relevantKeywords: ['智能家居控制系统设计', '智能家居控制系统方案', '智能家居控制系统哪个好'],
-        categories: {
-          '规划设计': ['智能家居控制系统设计', '智能家居控制系统方案'],
-          '产品选择': ['智能家居控制系统哪个好', '智能家居控制系统品牌']
-        }
-      };
+    // 如果提供了模拟响应，使用预设的模拟响应
+    if (prompt.includes('keyword_analysis') && this.mockResponses?.keyword_analysis) {
+      return this.mockResponses.keyword_analysis;
     }
     
-    if (prompt.includes('未满足需求') || prompt.includes('unmet')) {
+    if (prompt.includes('unmet_needs_analysis') && this.mockResponses?.unmet_needs_analysis) {
+      return this.mockResponses.unmet_needs_analysis;
+    }
+    
+    if (prompt.includes('market_insights') && this.mockResponses?.market_insights) {
+      return this.mockResponses.market_insights;
+    }
+    
+    if (prompt.includes('concrete_unmet_needs') && this.mockResponses?.concrete_unmet_needs) {
+      return this.mockResponses.concrete_unmet_needs;
+    }
+    
+    // 默认通用模拟响应
+    if (prompt.toLowerCase().includes('keyword')) {
       return {
-        unmetNeeds: [
+        potentialUnmetNeeds: [
           {
-            keyword: '智能家居控制系统DIY方案',
-            isUnmetNeed: true,
-            contentQuality: 0.4,
-            reason: '搜索结果中缺乏详细的DIY实施指南和组件选择信息'
-          }
-        ]
-      };
-    }
-    
-    if (prompt.includes('模式') || prompt.includes('pattern')) {
-      return {
-        patterns: ['控制系统 + 品牌', '控制系统 + 设计', '控制系统 + 方案'],
-        insights: ['用户更关注实用性而非技术细节', '品牌认可度是重要决策因素']
-      };
-    }
-    
-    if (prompt.includes('搜索查询') || prompt.includes('search_step')) {
-      return {
-        intent: '寻找可靠的智能家居控制系统解决方案',
-        satisfaction: 0.7,
-        nextQueries: ['智能家居控制系统品牌对比', '智能家居控制系统安装指南']
-      };
-    }
-    
-    if (prompt.includes('决策') || prompt.includes('decision')) {
-      return {
-        chosenOption: '智能家居控制系统品牌对比',
-        reason: '用户需要了解不同品牌的优缺点以做出购买决策'
-      };
-    }
-    
-    if (prompt.includes('洞察') || prompt.includes('insight')) {
-      return {
-        insights: [
-          {
-            type: '用户行为',
-            description: '用户从基础了解逐步深入到具体产品比较'
+            keyword: 'example need 1',
+            confidence: 0.9,
+            reason: 'Mock reason 1'
           },
           {
-            type: '决策点',
-            description: '品牌选择是关键决策点'
+            keyword: 'example need 2',
+            confidence: 0.8,
+            reason: 'Mock reason 2'
+          }
+        ],
+        insights: [
+          {
+            title: 'Insight 1',
+            description: 'Mock insight description 1'
+          },
+          {
+            title: 'Insight 2',
+            description: 'Mock insight description 2'
           }
         ]
       };
-    }
+    } 
     
-    // Default mock response
+    // ... 其他mock响应
+    
+    // 默认响应
     return {
-      result: 'Mock response',
-      query: prompt
+      results: [
+        { title: 'Mock Result 1', description: 'Mock description 1' },
+        { title: 'Mock Result 2', description: 'Mock description 2' }
+      ],
+      analysis: 'This is a mock analysis for testing purposes.'
     };
   }
 
