@@ -1,0 +1,1 @@
+/Users/leo/AIWeb/keywords/scripts/run-analyzer.sh

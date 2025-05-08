@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增强版LLM服务流式响应测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-weight: bold;
+        }
+        textarea {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            min-height: 100px;
+            resize: vertical;
+        }
+        select, input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .response {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            min-height: 200px;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+        }
+        .options {
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-value {
+            height: 100%;
+            background-color: #2ecc71;
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-weight: bold;
+            color: #333;
+            line-height: 20px;
+        }
+        .feedback {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .rating {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .rating button {
+            flex: 1;
+            padding: 8px;
+        }
+        .status {
+            margin-top: 10px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <h1>增强版LLM服务流式响应测试</h1>
+    
+    <div class="container">
+        <div class="form-group">
+            <label for="prompt">输入提示词:</label>
+            <textarea id="prompt" placeholder="请在这里输入您的提示词...">请详细分析人工智能技术在医疗领域的应用前景</textarea>
+        </div>
+        
+        <div class="options">
+            <div class="form-group">
+                <label for="analysisType">分析类型:</label>
+                <select id="analysisType">
+                    <option value="general">通用分析</option>
+                    <option value="keyword-analysis">关键词分析</option>
+                    <option value="user-journey">用户旅程</option>
+                    <option value="content-analysis">内容分析</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="model">选择模型:</label>
+                <select id="model">
+                    <option value="deepseek-prover-v2">deepseek-prover-v2:free</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="temperature">温度 (0-1):</label>
+                <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7" 
+                       oninput="document.getElementById('tempValue').textContent = this.value">
+                <span id="tempValue">0.7</span>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="strictFormat"> 强制JSON格式
+                </label>
+            </div>
+        </div>
+        
+        <button id="submitBtn">开始分析</button>
+        
+        <div class="progress-bar">
+            <div class="progress-value" id="progressBar"></div>
+            <div class="progress-text" id="progressText">准备就绪</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="responseArea">流式响应:</label>
+            <div id="responseArea" class="response"></div>
+        </div>
+        
+        <div class="feedback" id="feedbackSection" style="display: none;">
+            <h3>提交反馈</h3>
+            <p>您对这个分析结果的评价如何？</p>
+            <div class="rating">
+                <button class="rating-btn" data-rating="1">1 (很差)</button>
+                <button class="rating-btn" data-rating="2">2 (较差)</button>
+                <button class="rating-btn" data-rating="3">3 (一般)</button>
+                <button class="rating-btn" data-rating="4">4 (良好)</button>
+                <button class="rating-btn" data-rating="5">5 (优秀)</button>
+            </div>
+            <div class="form-group">
+                <label for="feedbackText">附加评论:</label>
+                <textarea id="feedbackText" placeholder="请提供您的建议或评论..."></textarea>
+            </div>
+            <button id="submitFeedbackBtn">提交反馈</button>
+            <div class="status" id="feedbackStatus"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentRequestId = null;
+        const serverUrl = 'http://localhost:3000'; // 服务器URL
+        
+        document.getElementById('submitBtn').addEventListener('click', startStreaming);
+        
+        document.querySelectorAll('.rating-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.rating-btn').forEach(b => 
+                    b.style.backgroundColor = '#3498db');
+                this.style.backgroundColor = '#27ae60';
+            });
+        });
+        
+        document.getElementById('submitFeedbackBtn').addEventListener('click', submitFeedback);
+        
+        async function startStreaming() {
+            const prompt = document.getElementById('prompt').value.trim();
+            if (!prompt) {
+                alert('请输入提示词');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const responseArea = document.getElementById('responseArea');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            // 准备请求参数
+            const analysisType = document.getElementById('analysisType').value;
+            const model = document.getElementById('model').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const strictFormat = document.getElementById('strictFormat').checked;
+            
+            // 重置UI
+            submitBtn.disabled = true;
+            responseArea.innerText = '';
+            progressBar.style.width = '0%';
+            progressText.innerText = '开始处理...';
+            document.getElementById('feedbackSection').style.display = 'none';
+            
+            // 准备请求数据
+            const requestData = {
+                prompt,
+                analysisType,
+                options: {
+                    model,
+                    temperature,
+                    format: strictFormat ? 'json' : 'text',
+                    strictFormat
+                }
+            };
+            
+            try {
+                // 创建EventSource连接
+                const response = await fetch(`${serverUrl}/api/analyze/stream`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                // 读取流
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const text = decoder.decode(value);
+                    const events = text.split('\n\n').filter(line => line.trim().startsWith('data:'));
+                    
+                    for (const event of events) {
+                        try {
+                            const data = JSON.parse(event.replace('data: ', ''));
+                            
+                            if (data.type === 'progress') {
+                                // 更新进度
+                                progressBar.style.width = `${data.progress}%`;
+                                progressText.innerText = `${data.progress}% 完成`;
+                            } else if (data.type === 'done') {
+                                // 完成
+                                progressBar.style.width = '100%';
+                                progressText.innerText = '分析完成';
+                                submitBtn.disabled = false;
+                                currentRequestId = data.requestId;
+                                document.getElementById('feedbackSection').style.display = 'block';
+                            } else if (data.type === 'error') {
+                                // 错误
+                                responseArea.innerHTML += `<div style="color: red;">错误: ${data.error}</div>`;
+                                progressText.innerText = '分析失败';
+                                submitBtn.disabled = false;
+                            } else if (data.chunk) {
+                                // 添加响应块
+                                responseArea.innerText += data.chunk;
+                                // 滚动到底部
+                                responseArea.scrollTop = responseArea.scrollHeight;
+                            }
+                        } catch (error) {
+                            console.error('解析事件数据失败:', error, event);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('流式请求错误:', error);
+                responseArea.innerHTML += `<div style="color: red;">连接错误: ${error.message}</div>`;
+                progressText.innerText = '连接失败';
+                submitBtn.disabled = false;
+            }
+        }
+        
+        async function submitFeedback() {
+            if (!currentRequestId) return;
+            
+            // 获取选中的评分
+            const selectedButton = document.querySelector('.rating-btn[style*="background-color: rgb(39, 174, 96)"]');
+            if (!selectedButton) {
+                alert('请先选择评分');
+                return;
+            }
+            
+            const rating = parseInt(selectedButton.dataset.rating);
+            const feedback = document.getElementById('feedbackText').value;
+            const statusArea = document.getElementById('feedbackStatus');
+            
+            statusArea.innerText = '提交中...';
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/feedback`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        requestId: currentRequestId,
+                        rating,
+                        feedback
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    statusArea.innerText = '反馈已提交，谢谢！';
+                    statusArea.style.color = '#27ae60';
+                } else {
+                    statusArea.innerText = `提交失败: ${result.error}`;
+                    statusArea.style.color = '#e74c3c';
+                }
+            } catch (error) {
+                console.error('提交反馈错误:', error);
+                statusArea.innerText = `提交错误: ${error.message}`;
+                statusArea.style.color = '#e74c3c';
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -13,7 +13,7 @@
   <a href="#核心价值">核心价值</a> •
   <a href="#主要功能">主要功能</a> •
   <a href="#系统架构">系统架构</a> •
-  <a href="#技术特点">技术特点</a> •
+  <a href="#增强版LLM服务">增强版LLM服务</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#使用示例">使用示例</a> •
   <a href="#文档">文档</a>
@@ -207,6 +207,98 @@ const result = await workflow.graph.invoke({
 - **统一数据交换格式**: 标准化Agent间数据交换，确保系统一致性和可维护性
 - **全面日志系统**: 多级别日志记录和监控，便于追踪系统状态和调试
 
+## 增强版LLM服务
+
+本系统最新版本集成了全新的增强版LLM服务，大幅提升了性能、降低了成本，并提供了更好的用户体验。
+
+### 主要特性
+
+#### 1. 降低成本，提升响应速度
+
+- **模型自动选择**：根据任务复杂度自动选择合适的模型，简单任务使用轻量级模型，复杂任务使用强大模型
+- **缓存机制**：为常见关键词和查询实现结果缓存，减少重复调用，节省成本
+- **流式响应**：使用流式响应，提高用户体验，即时显示生成内容
+- **批处理请求**：合并多个小请求为批处理，减少API调用次数
+
+#### 2. 提高工具的实用性和易用性
+
+- **交互式报告**：提供更丰富的报告格式，包括可视化图表、交互式元素
+- **定制化输出**：允许用户指定感兴趣的特定分析维度
+- **进度反馈**：提供实时分析进度和预估完成时间
+- **多种导出格式**：支持导出到不同格式，便于与其他工具集成
+
+#### 3. 持续提升分析质量
+
+- **反馈循环**：收集用户对分析结果的反馈，用于改进模型
+- **自我优化**：系统自动评估分析质量，不断调整算法参数
+- **A/B测试框架**：自动测试不同分析策略的效果
+- **用户行为学习**：根据用户的使用模式调整默认设置和推荐
+
+### 服务模式运行
+
+增强版LLM服务不仅支持作为集成组件使用，还可以作为独立服务运行，便于测试和集成：
+
+```bash
+# 安装依赖
+npm install express cors
+
+# 启动服务 (前台运行)
+npm run server
+
+# 以守护进程模式运行（永久运行）
+npm run server:daemon
+
+# 高级配置 (指定端口、模型等)
+./scripts/run-server.sh -p 5000 -m gpt-4 -c -s -d
+```
+
+### 测试流式响应功能
+
+服务启动后，可以通过以下方式测试流式响应功能:
+
+1. **使用Web界面测试**:
+   - 打开 `examples/streaming-client.html` 文件在浏览器中
+   - 输入提示词，选择模型和参数，点击"开始分析"
+   - 观察实时流式输出和进度更新
+   - 分析完成后可以提交反馈
+
+2. **使用API直接测试**:
+   - 标准API: `http://localhost:3000/api/analyze` (POST)
+   - 流式API: `http://localhost:3000/api/analyze/stream` (POST)
+   - 服务信息: `http://localhost:3000/api/info` (GET)
+
+3. **使用CURL测试**:
+```bash
+curl -X POST http://localhost:3000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"分析人工智能在医疗领域的应用","analysisType":"general"}'
+```
+
+4. **在代码中集成**:
+```typescript
+// 使用fetch API进行流式请求
+const response = await fetch('http://localhost:3000/api/analyze/stream', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    prompt: '分析智能家居市场趋势',
+    options: { model: 'gpt-4' }
+  })
+});
+
+// 处理流式响应
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  // 处理服务器发送的事件...
+}
+```
+
 ## 快速开始
 
 ### 安装
@@ -233,23 +325,81 @@ cp .env.example .env
 ./update-dependencies.sh
 ```
 
-### 使用示例
+## 使用示例
+
+### 基本分析
 
 ```bash
-# 基本分析
-npm run analyze --keyword "智能家居控制系统"
-
 # 使用自适应工作流进行分析
 ./analyze-adaptive.sh "人工智能应用" --concurrent 3
 
 # 快速模式（跳过用户旅程模拟）
 ./analyze-adaptive.sh "区块链技术" --fast
-
-# 优先关键词发现
-./analyze-adaptive.sh "元宇宙" --prioritize-discovery
 ```
 
-### 高级配置
+### 使用增强版LLM服务
+
+```typescript
+import { EnhancedLLMService } from './src/core/llm/EnhancedLLMService';
+
+// 创建增强版LLM服务
+const llmService = new EnhancedLLMService({
+  enableCache: true,
+  autoModelSelection: true
+});
+
+// 分析关键词
+const result = await llmService.analyze(
+  '分析关键词"智能家居"的搜索意图和用户需求',
+  'keyword-analysis',
+  { format: 'json' }
+);
+
+console.log(result);
+```
+
+### 使用流式响应
+
+```typescript
+await llmService.analyze('详细分析智能家居市场趋势', 'streaming-demo', {
+  stream: true,
+  onChunk: (chunk) => {
+    process.stdout.write(chunk); // 实时输出
+  }
+});
+```
+
+### 与LangChain集成
+
+```typescript
+import { AgentLLMService } from './src/core/llm/AgentLLMService';
+
+const agentLLM = new AgentLLMService({
+  enableCache: true,
+  autoModelSelection: true
+});
+
+// 使用LangChain兼容接口
+const response = await agentLLM.call([
+  { role: 'system', content: '你是一个市场分析专家' },
+  { role: 'user', content: '分析智能家居市场趋势' }
+]);
+```
+
+## 文档
+
+详细文档请参考：
+
+- [增强LLM服务文档](docs/core/enhanced-llm-service.md)
+- [架构概述](docs/architecture/architecture.md)
+- [Agent协作机制](docs/architecture/agent-collaboration.md)
+- [状态共享机制](docs/development/state-sharing.md)
+- [错误恢复策略](docs/development/error-recovery.md)
+- [自适应调度](docs/development/adaptive-scheduling.md)
+- [API文档](docs/api/index.md)
+- [命令行使用](docs/usage/cli.md)
+
+## 高级配置
 
 通过 .env 文件可以进行高级配置：
 
@@ -268,19 +418,6 @@ LOG_LEVEL=info
 ENABLE_FILE_LOGGING=true
 ```
 
-## 文档
-
-详细文档请参考：
-
-- [架构概述](docs/architecture/architecture.md)
-- [Agent协作机制](docs/architecture/agent-collaboration.md)
-- [状态共享机制](docs/development/state-sharing.md)
-- [错误恢复策略](docs/development/error-recovery.md)
-- [自适应调度](docs/development/adaptive-scheduling.md)
-- [API文档](docs/api/index.md)
-- [命令行使用](docs/usage/cli.md)
-- [路线图](docs/development/RoadMap.md)
-
 ## 贡献
 
 欢迎贡献代码、报告问题或提出新功能建议。请参考[贡献指南](CONTRIBUTING.md)。
@@ -288,3 +425,45 @@ ENABLE_FILE_LOGGING=true
 ## 许可
 
 本项目采用 MIT 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
+
+## 命令行使用
+
+### 基本用法
+
+NeuralMiner现在提供了持续运行模式，可以连续分析多个关键词而无需重启服务：
+
+```bash
+# 启动交互式分析服务
+./analyze.sh chat
+
+# 启动后可以连续分析多个关键词，不会退出服务
+```
+
+所有脚本已经整理到了scripts目录下的不同分类中，主要包括：
+
+- `scripts/analyze/` - 关键词分析相关脚本
+- `scripts/debug/` - 调试工具脚本
+- `scripts/test/` - 测试脚本
+- `scripts/utils/` - 实用工具脚本
+- `scripts/monitor/` - 监控和日志脚本
+
+为了便于访问，项目提供了以下主要入口点：
+
+- `./analyze.sh` - 关键词分析工具
+- `./debug.sh` - 调试工具
+- `./test.sh` - 测试工具
+
+### 整理脚本
+
+如果您添加了新的脚本，可以使用整理工具将它们归类：
+
+```bash
+# 整理所有散落的脚本到对应目录
+./scripts/organize-scripts.sh
+```
+
+### 综合启动脚本
+
+全新的综合启动脚本提供了更直观、更友好的命令行体验：
+
+```

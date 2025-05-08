@@ -106,7 +106,7 @@ async function main() {
     // 创建多搜索引擎工具实例
     const multiSearchTools = new MultiSearchTools({
       enabledEngines: process.env.ENABLED_ENGINES ? 
-        process.env.ENABLED_ENGINES.split(',') : ['baidu', 'web'],
+        process.env.ENABLED_ENGINES.split(',') : ['baidu', 'google'],
       defaultEngine: process.env.DEFAULT_ENGINE || 'baidu',
       proxyServer: process.env.PROXY_SERVER
     });
@@ -122,17 +122,17 @@ async function main() {
       {
         keywordAgent: new KeywordAgent({ 
           useAutocomplete: true,
-          searchTools: multiSearchTools.getSearchTools('baidu'),
+          // searchTools: multiSearchTools.getSearchTools('baidu'),
           searchEngine // 为了向后兼容
         }) as any,
         journeyAgent: new JourneyAgent({
           maxSteps: 3,
-          searchTools: multiSearchTools.getSearchTools('web'),
+          // searchTools: multiSearchTools.getSearchTools('web'),
           searchEngine // 为了向后兼容
         }) as any,
         contentAgent: new ContentAgent({
           maxContentSamples: 3,
-          searchTools: multiSearchTools.getSearchTools('baidu'),
+          // searchTools: multiSearchTools.getSearchTools('baidu'),
           searchEngine // 为了向后兼容
         }) as any,
         reportAgent: new ReportAgent({

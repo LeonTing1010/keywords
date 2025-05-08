@@ -97,6 +97,8 @@ export interface AnalyzeOptions {
     includeVisualization?: boolean;
     interactive?: boolean;
   };
+  model?: string;
+  batchId?: string;
 }
 
 /**
