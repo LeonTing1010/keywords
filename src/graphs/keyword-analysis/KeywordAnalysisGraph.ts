@@ -5,10 +5,10 @@
 import { END, StateGraph } from '@langchain/langgraph';
 import { GraphStateType } from '../../types/schema';
 import { 
-  KeywordAgent, 
-  JourneyAgent, 
-  ContentAgent, 
-  ReportAgent 
+  MarketNeedExplorerAgent, 
+  UserJourneySimulatorAgent, 
+  SolutionEvaluatorAgent, 
+  OpportunityStrategistAgent 
 } from '../../agents';
 import { logger } from '../../infra/logger';
 
@@ -78,21 +78,23 @@ export function createKeywordAnalysisGraph(config: KeywordAnalysisGraphConfig = 
     const outputDir = config.outputDir || './output';
     
     // 创建各Agent实例
-    const keywordAgent = new KeywordAgent({
+    const marketNeedExplorerAgent = new MarketNeedExplorerAgent({
       useAutocomplete: !fastMode,  // 快速模式下禁用自动补全
-      maxKeywords: fastMode ? 10 : 30  // 快速模式减少关键词数量
+      maxKeywords: fastMode ? 10 : 30,  // 快速模式减少关键词数量
+      enableQuantification: true,
+      enableCategorization: !fastMode // 快速模式下禁用分类
     });
     
-    const journeyAgent = new JourneyAgent({
+    const userJourneySimulatorAgent = new UserJourneySimulatorAgent({
       maxSteps: fastMode ? 3 : 5  // 快速模式减少模拟步骤
     });
     
-    const contentAgent = new ContentAgent({
+    const solutionEvaluatorAgent = new SolutionEvaluatorAgent({
       maxContentSamples: fastMode ? 3 : 5,  // 快速模式减少内容样本
       detailedAnalysis: !fastMode  // 快速模式简化分析
     });
     
-    const reportAgent = new ReportAgent({
+    const opportunityStrategistAgent = new OpportunityStrategistAgent({
       format,
       language,
       outputDir,
@@ -110,10 +112,10 @@ export function createKeywordAnalysisGraph(config: KeywordAnalysisGraphConfig = 
     });
     
     // 添加节点
-    builder.addNode("keywordDiscovery", keywordAgent.createGraphNode());
-    builder.addNode("journeySimulation", journeyAgent.createGraphNode());
-    builder.addNode("contentAnalysis", contentAgent.createGraphNode());
-    builder.addNode("reportGeneration", reportAgent.createGraphNode());
+    builder.addNode("keywordDiscovery", marketNeedExplorerAgent.createGraphNode());
+    builder.addNode("journeySimulation", userJourneySimulatorAgent.createGraphNode());
+    builder.addNode("contentAnalysis", solutionEvaluatorAgent.createGraphNode());
+    builder.addNode("reportGeneration", opportunityStrategistAgent.createGraphNode());
     
     // 添加边 - 使用正确的API
     builder.addEdge("__start__", "keywordDiscovery");

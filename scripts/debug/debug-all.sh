@@ -73,7 +73,7 @@ run_cmd "ls -la ./logs"
 # 3. 运行简单的报告生成测试
 log "\n=== 运行报告生成测试 ==="
 log "运行独立的报告生成调试脚本:"
-run_cmd "node debug-report.js"
+run_cmd "node scripts/debug/debug-report.js"
 
 # 4. 检查最新生成的报告
 log "\n=== 检查生成的报告 ==="
@@ -98,7 +98,7 @@ fi
 # 5. 启动监控工具
 log "\n=== 启动LLM日志监控 ==="
 log "在后台启动监控工具..."
-run_cmd "node monitor-llm-logs.js > ${LOG_DIR}/monitor_${TIMESTAMP}.log 2>&1 &"
+run_cmd "node script/monitor/monitor-llm-logs.js > ${LOG_DIR}/monitor_${TIMESTAMP}.log 2>&1 &"
 MONITOR_PID=$!
 log "监控工具进程ID: $MONITOR_PID"
 
@@ -116,6 +116,9 @@ log "\n=== 检查分析结果 ==="
 LATEST_REPORT=$(find ./output -type f -name "*.md" -o -name "*.json" | sort -r | head -n 1)
 if [ -n "$LATEST_REPORT" ]; then
   log_success "找到最新报告: $LATEST_REPORT"
+  log "Verifying file existence and permissions for $LATEST_REPORT:"
+  run_cmd "ls -la ./output"
+  run_cmd "ls -l \"$LATEST_REPORT\""
   log "报告内容预览:"
   run_cmd "head -n 10 \"$LATEST_REPORT\""
   log "报告大小:"
@@ -137,14 +140,14 @@ else
   log_warning "监控工具进程未运行"
 fi
 
-# 10. 收集重要的调试日志
-log "\n=== 收集调试信息 ==="
-DEBUG_PACKAGE="debug_package_${TIMESTAMP}.tar.gz"
-run_cmd "tar -czf $DEBUG_PACKAGE $LOG_FILE logs/debug/ output/latest_report.*"
-log_success "调试信息已打包: $DEBUG_PACKAGE"
+# # 10. 收集重要的调试日志
+# log "\n=== 收集调试信息 ==="
+# DEBUG_PACKAGE="debug_package_${TIMESTAMP}.tar.gz"
+# run_cmd "tar -czf $DEBUG_PACKAGE $LOG_FILE logs/debug/ output/latest_report.*"
+# log_success "调试信息已打包: $DEBUG_PACKAGE"
 
 # 结束
 log "\n=== 调试完成 ==="
 log "调试日志: $LOG_FILE"
-log "调试包: $DEBUG_PACKAGE"
-log "时间: $(date)" 
+# log "调试包: $DEBUG_PACKAGE"
+log "时间: $(date)"

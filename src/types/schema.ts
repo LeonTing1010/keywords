@@ -98,6 +98,18 @@ export const ContentAnalysisState = z.object({
     targetAudience: z.string(),
     possibleSolutions: z.array(z.string()).default([])
   })).default([]),
+  solutionOpportunities: z.array(z.object({
+    title: z.string(),
+    targetUsers: z.string(),
+    valueProposition: z.string(),
+    keyProblemSolved: z.string(),
+    differentiators: z.array(z.string()).default([]),
+    keyComponents: z.array(z.string()).default([]),
+    marketPotential: z.number().default(5),
+    implementationDifficulty: z.number().default(5),
+    priority: z.number().default(5),
+    challenges: z.array(z.string()).default([])
+  })).default([]),
   statistics: z.object({
     unmetNeedsCount: z.number().default(0),
     insightsCount: z.number().default(0),

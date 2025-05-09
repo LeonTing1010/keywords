@@ -487,13 +487,14 @@ export class MultiSearchTools {
   /**
    * 获取所有工具
    */
-  getAllTools() {
+  public getAllTools() {
     const engineSelectionTool = this.getEngineSelectionTool();
     const smartSearchTool = this.getSmartSearchTool();
     
     // 获取默认SearchTools的所有工具
     const defaultSearchTools = this.getSearchTools();
-    const basicTools = defaultSearchTools.getAllTools();
+    // 使用类型转换避免TS4094错误
+    const basicTools = (defaultSearchTools as any).getAllTools();
     
     return [
       engineSelectionTool,

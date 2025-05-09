@@ -7,10 +7,10 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { RunnableLambda, Runnable } from '@langchain/core/runnables';
 import { END, StateGraph } from '@langchain/langgraph';
 import { 
-  KeywordAgent, 
-  JourneyAgent, 
-  ContentAgent, 
-  ReportAgent 
+  MarketNeedExplorerAgent, 
+  UserJourneySimulatorAgent, 
+  SolutionEvaluatorAgent, 
+  OpportunityStrategistAgent 
 } from '../../agents';
 import { BaseAgent } from '../../agents/base/BaseAgent';
 import { logger } from '../../infra/logger';
@@ -38,10 +38,10 @@ export interface AdaptiveWorkflowConfig {
  */
 export function createAdaptiveWorkflow(
   agents: {
-    keywordAgent: KeywordAgent;
-    journeyAgent: JourneyAgent;
-    contentAgent: ContentAgent;
-    reportAgent: ReportAgent;
+    marketNeedExplorerAgent: MarketNeedExplorerAgent;
+    userJourneySimulatorAgent: UserJourneySimulatorAgent;
+    solutionEvaluatorAgent: SolutionEvaluatorAgent;
+    opportunityStrategistAgent: OpportunityStrategistAgent;
   },
   config: AdaptiveWorkflowConfig = {}
 ) {
@@ -67,7 +67,7 @@ export function createAdaptiveWorkflow(
   // 1. 构建Agent调度信息
   const agentInfos: AgentScheduleInfo[] = [
     {
-      agentId: 'keywordAgent',
+      agentId: 'marketNeedExplorerAgent',
       priority: mergedConfig.prioritizeKeywordDiscovery ? AgentPriority.HIGH : AgentPriority.NORMAL,
       estimatedDuration: 1000,
       resourceIntensity: 0.3,
@@ -76,29 +76,29 @@ export function createAdaptiveWorkflow(
       tags: ['keyword']
     },
     {
-      agentId: 'journeyAgent',
+      agentId: 'userJourneySimulatorAgent',
       priority: AgentPriority.NORMAL,
       estimatedDuration: 1200,
       resourceIntensity: 0.4,
-      dependencies: ['keywordAgent'],
+      dependencies: ['marketNeedExplorerAgent'],
       canExecuteParallel: false,
       tags: ['journey']
     },
     {
-      agentId: 'contentAgent',
+      agentId: 'solutionEvaluatorAgent',
       priority: AgentPriority.NORMAL,
       estimatedDuration: 1500,
       resourceIntensity: 0.5,
-      dependencies: ['journeyAgent'],
+      dependencies: ['userJourneySimulatorAgent'],
       canExecuteParallel: false,
       tags: ['content']
     },
     {
-      agentId: 'reportAgent',
+      agentId: 'opportunityStrategistAgent',
       priority: AgentPriority.NORMAL,
       estimatedDuration: 800,
       resourceIntensity: 0.2,
-      dependencies: ['contentAgent'],
+      dependencies: ['solutionEvaluatorAgent'],
       canExecuteParallel: false,
       tags: ['report']
     }
@@ -106,10 +106,10 @@ export function createAdaptiveWorkflow(
 
   // 2. 构建工作流步骤
   const steps: WorkflowStep[] = [
-    { agentId: 'keywordAgent', stepId: 'step_keyword', status: 'pending' },
-    { agentId: 'journeyAgent', stepId: 'step_journey', status: 'pending' },
-    { agentId: 'contentAgent', stepId: 'step_content', status: 'pending' },
-    { agentId: 'reportAgent', stepId: 'step_report', status: 'pending' }
+    { agentId: 'marketNeedExplorerAgent', stepId: 'step_keyword', status: 'pending' },
+    { agentId: 'userJourneySimulatorAgent', stepId: 'step_journey', status: 'pending' },
+    { agentId: 'solutionEvaluatorAgent', stepId: 'step_content', status: 'pending' },
+    { agentId: 'opportunityStrategistAgent', stepId: 'step_report', status: 'pending' }
   ];
 
   // 3. 构建工作流配置
@@ -134,10 +134,10 @@ export function createAdaptiveWorkflow(
     async run(initialInput: any) {
       // 绑定Agent执行逻辑
       const agentMap = {
-        keywordAgent: agents.keywordAgent,
-        journeyAgent: agents.journeyAgent,
-        contentAgent: agents.contentAgent,
-        reportAgent: agents.reportAgent
+        marketNeedExplorerAgent: agents.marketNeedExplorerAgent,
+        userJourneySimulatorAgent: agents.userJourneySimulatorAgent,
+        solutionEvaluatorAgent: agents.solutionEvaluatorAgent,
+        opportunityStrategistAgent: agents.opportunityStrategistAgent
       };
       scheduler.setAgentExecutor(async (agentId, context) => {
         const agent = agentMap[agentId as keyof typeof agentMap];
@@ -233,22 +233,25 @@ export async function initializeAdaptiveWorkflow(config: AdaptiveWorkflowConfig 
   const searchTools = new SearchTools();
   
   // 创建各Agent实例
-  const keywordAgent = new KeywordAgent({ 
+  const marketNeedExplorerAgent = new MarketNeedExplorerAgent({ 
+    searchTools,
+    enableQuantification: true,
+    enableCategorization: true,
     useAutocomplete: true,
-    searchTools
+    maxKeywords: config.fastMode ? 20 : 50
   });
   
-  const journeyAgent = new JourneyAgent({ 
+  const userJourneySimulatorAgent = new UserJourneySimulatorAgent({ 
     maxSteps: config.fastMode ? 2 : 3,
     searchTools
   });
   
-  const contentAgent = new ContentAgent({
+  const solutionEvaluatorAgent = new SolutionEvaluatorAgent({
     maxContentSamples: config.fastMode ? 2 : 3,
     searchTools
   });
   
-  const reportAgent = new ReportAgent({
+  const opportunityStrategistAgent = new OpportunityStrategistAgent({
     format: config.format || 'markdown',
     language: config.language || 'zh',
     outputDir: config.outputDir || './output'
@@ -256,7 +259,7 @@ export async function initializeAdaptiveWorkflow(config: AdaptiveWorkflowConfig 
 
   // 创建工作流
   return createAdaptiveWorkflow(
-    { keywordAgent, journeyAgent, contentAgent, reportAgent },
+    { marketNeedExplorerAgent, userJourneySimulatorAgent, solutionEvaluatorAgent, opportunityStrategistAgent },
     config
   );
 } 

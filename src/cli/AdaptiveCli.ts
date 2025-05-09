@@ -5,10 +5,10 @@
  * 使用AdaptiveKeywordGraph实现高效的多Agent协作分析
  */
 import { createAdaptiveWorkflow } from '../graphs/keyword-analysis/AdaptiveKeywordGraph';
-import { KeywordAgent } from '../agents/keyword/KeywordAgent';
-import { ContentAgent } from '../agents/content/ContentAgent';
-import { JourneyAgent } from '../agents/journey/JourneyAgent'; 
-import { ReportAgent } from '../agents/report/ReportAgent';
+import { MarketNeedExplorerAgent } from '../agents/MarketNeedExplorerAgent';
+import { SolutionEvaluatorAgent } from '../agents/SolutionEvaluatorAgent';
+import { UserJourneySimulatorAgent } from '../agents/UserJourneySimulatorAgent'; 
+import { OpportunityStrategistAgent } from '../agents/OpportunityStrategistAgent';
 import { logger } from '../infra/logger';
 import { MultiSearchTools } from '../tools/search/MultiSearchTools';
 import { SearchTools } from '../tools/search/SearchTools';
@@ -120,22 +120,23 @@ async function main() {
     // 创建自适应工作流
     const workflow = createAdaptiveWorkflow(
       {
-        keywordAgent: new KeywordAgent({ 
-          useAutocomplete: true,
-          // searchTools: multiSearchTools.getSearchTools('baidu'),
+        marketNeedExplorerAgent: new MarketNeedExplorerAgent({ 
+          enableQuantification: true,
+          enableCategorization: !argv.fast,
+          maxKeywords: argv.fast ? 20 : 50,
           searchEngine // 为了向后兼容
         }) as any,
-        journeyAgent: new JourneyAgent({
+        userJourneySimulatorAgent: new UserJourneySimulatorAgent({
           maxSteps: 3,
           // searchTools: multiSearchTools.getSearchTools('web'),
           searchEngine // 为了向后兼容
         }) as any,
-        contentAgent: new ContentAgent({
+        solutionEvaluatorAgent: new SolutionEvaluatorAgent({
           maxContentSamples: 3,
           // searchTools: multiSearchTools.getSearchTools('baidu'),
           searchEngine // 为了向后兼容
         }) as any,
-        reportAgent: new ReportAgent({
+        opportunityStrategistAgent: new OpportunityStrategistAgent({
           format: argv.format as any,
           language: argv.language as any,
           outputDir: argv.output

@@ -250,11 +250,17 @@ async function agentLLMServiceExample() {
   // 收集流式响应块
   let streamOutput = '';
   
+  // 流式输出回调函数
+  const onStream = (chunk: string) => {
+    streamOutput += chunk;
+    process.stdout.write(chunk);
+  };
+  
   // 调用LLM
   const response = await agentLLM.call(messages as any, {
     stream: true,
     streamCallback: (chunk: string) => {
-      if (chunk && onStream) {
+      if (chunk) {
         onStream(chunk);
       }
     }
