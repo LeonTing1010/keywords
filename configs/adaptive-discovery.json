@@ -1,0 +1,10 @@
+{
+  "maxIterations": 3,
+  "maxProblems": 15,
+  "outputDir": "./output/adaptive-discovery",
+  "format": "markdown",
+  "language": "zh",
+  "trackAgents": true,
+  "adaptiveMode": true,
+  "learningRate": 0.05
+} 
