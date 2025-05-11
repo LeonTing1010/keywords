@@ -1,12 +1,12 @@
-# NeuralMiner
+# KeywordPioneer
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="NeuralMiner Logo" width="200"/>
+  <img src="docs/assets/logo.png" alt="KeywordPioneer Logo" width="200"/>
 </p>
 
 <p align="center">
-  <b>智能多Agent协作需求挖掘与价值验证系统</b><br>
-  <i>强大的多Agent协作机制，发现真实存在但尚未被解决的高价值用户需求</i>
+  <b>智能多Agent协作发现高价值市场机会与未满足需求系统</b><br>
+  <i>探索真实存在但尚未被解决的高价值用户需求，发现市场蓝海</i>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ## 核心价值
 
-NeuralMiner 是一个基于自适应多Agent协作架构的需求挖掘与价值验证系统。通过融合自适应调度、状态共享和智能恢复机制，NeuralMiner能够:
+KeywordPioneer是一个基于自适应多Agent协作架构的需求挖掘与价值验证系统。通过融合自适应调度、状态共享和智能恢复机制，KeywordPioneer能够:
 
 - **建立智能、高效、可靠的多Agent协作生态**，支持复杂协同任务的高效执行
 - **发现互联网上尚未被满足的真实用户需求**，识别内容空白与市场机会
@@ -36,7 +36,7 @@ NeuralMiner 是一个基于自适应多Agent协作架构的需求挖掘与价值
 
 ### 🔍 关键词需求挖掘
 
-通过关键词+字母组合的方式，利用搜索引擎自动补全功能发现相关潜在需求。
+通过关键词+字母组合的方式，利用搜索引擎自动补全功能发现相关潜在需求，深入洞察用户真实搜索意图。
 
 ### 🛣️ 用户旅程模拟
 
@@ -64,7 +64,7 @@ NeuralMiner 是一个基于自适应多Agent协作架构的需求挖掘与价值
 
 ## 问题发现框架
 
-NeuralMiner的核心创新是**问题发现框架**，这是一个专门用于发现高价值未解决问题的递进式多Agent协作系统。
+KeywordPioneer的核心创新是**问题发现框架**，这是一个专门用于发现高价值未解决问题的递进式多Agent协作系统。
 
 ### 框架设计理念
 
@@ -119,7 +119,7 @@ NeuralMiner的核心创新是**问题发现框架**，这是一个专门用于�
 
 ## 系统架构
 
-NeuralMiner 采用基于自适应多Agent协作的先进架构设计，包含状态共享、恢复管理和自适应调度三大核心能力。
+KeywordPioneer采用基于自适应多Agent协作的先进架构设计，包含状态共享、恢复管理和自适应调度三大核心能力。
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -228,7 +228,7 @@ neuralminer/
 
 ### 专业Agent职责
 
-NeuralMiner系统由四个专业Agent协作完成需求挖掘与价值验证:
+KeywordPioneer系统由四个专业Agent协作完成需求挖掘与价值验证:
 
 1. **市场需求探索Agent (需求发现专家)**: 
    - 实现高级关键词挖掘策略，超越简单自动补全功能
@@ -361,110 +361,174 @@ while (true) {
 }
 ```
 
+## Schema Validation for LLM Responses
+
+The codebase now includes a robust schema validation framework for LLM responses, providing:
+
+- **Automatic Validation**: LLM outputs are automatically validated against predefined Zod schemas
+- **Automatic Retry**: When outputs don't match schemas, the system automatically retries with corrective feedback
+- **Type Safety**: Full TypeScript type inference through Zod schemas
+- **Unified Logic**: All agents use the same validation logic, reducing code duplication
+- **Enhanced Prompts**: Schemas are converted to TypeScript interfaces and included in prompts to guide LLM outputs
+
+To use schema validation in your agent:
+
+```typescript
+import { z } from 'zod';
+import { AgentLLMServiceExtensions } from '../../core/llm/SchemaValidator';
+
+// Define a schema for your expected response
+const responseSchema = z.object({
+  analysis: z.string(),
+  score: z.number(),
+  categories: z.array(z.string())
+});
+
+// Use the schema validation extension
+const result = await AgentLLMServiceExtensions.analyzeWithObjectSchema(
+  agentLLM,
+  prompt,
+  'analysis-type',
+  responseSchema,
+  {
+    temperature: 0.7,
+    defaultValue: { analysis: '', score: 0, categories: [] }
+  }
+);
+
+// 'result' is now fully typed and validated!
+```
+
+See the [Schema Validation Guide](docs/development/SchemaValidation.md) for detailed usage instructions.
+
 ## 快速开始
 
 ### 安装
 
+1. 克隆仓库并安装依赖：
+
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/neuralminer.git
-cd neuralminer
-
-# 安装依赖
+git clone https://github.com/yourusername/keyword-pioneer.git
+cd keyword-pioneer
 npm install
-
-# 设置环境变量
-cp .env.example .env
-# 编辑.env文件，添加你的API密钥
 ```
 
-### 依赖更新
+2. 配置环境变量：
 
-为确保兼容性，可以使用提供的脚本更新依赖：
+复制`.env.example`文件为`.env`，并配置LLM API密钥：
 
 ```bash
-# 更新到兼容版本的依赖
-./update-dependencies.sh
+cp .env.example .env
+# 编辑.env文件，填写必要配置
+```
+
+### 使用方法
+
+#### 自适应分析
+
+使用自适应多Agent协作分析关键词：
+
+```bash
+npm run analyze:adaptive -- --keyword "你的关键词"
+```
+
+高级选项：
+
+```bash
+npm run analyze:adaptive -- --keyword "你的关键词" --fast --concurrent 5 --prioritize-discovery --format markdown --language zh
+```
+
+#### 问题发现分析
+
+专注于找出高价值未解决问题：
+
+```bash
+npm run analyze:problem-discovery -- --keyword "你的关键词"
+```
+
+高级选项：
+
+```bash
+npm run analyze:problem-discovery -- --keyword "你的关键词" --iterations 3 --problems 15 --format markdown --language zh
 ```
 
 ## 使用示例
 
-### 基本分析
+### 发现创业机会
+
+通过分析热门技术关键词发现潜在创业机会：
 
 ```bash
-# 使用自适应工作流进行分析
-./analyze-adaptive.sh "人工智能应用" --concurrent 3
-
-# 快速模式（跳过用户旅程模拟）
-./analyze-adaptive.sh "区块链技术" --fast
+npm run analyze:adaptive -- --keyword "AI应用"
 ```
 
-### 使用增强版LLM服务
+### 找出内容差距
 
-```typescript
-import { EnhancedLLMService } from './src/core/llm/EnhancedLLMService';
+分析特定领域的内容满足度，发现内容创作机会：
 
-// 创建增强版LLM服务
-const llmService = new EnhancedLLMService({
-  enableCache: true,
-  autoModelSelection: true
-});
-
-// 分析关键词
-const result = await llmService.analyze(
-  '分析关键词"智能家居"的搜索意图和用户需求',
-  'keyword-analysis',
-  { format: 'json' }
-);
-
-console.log(result);
+```bash
+npm run analyze:problem-discovery -- --keyword "育儿指南" --iterations 3
 ```
 
-### 使用流式响应
+### 快速市场验证
 
-```typescript
-await llmService.analyze('详细分析智能家居市场趋势', 'streaming-demo', {
-  stream: true,
-  onChunk: (chunk) => {
-    process.stdout.write(chunk); // 实时输出
-  }
-});
-```
+对产品创意进行快速市场需求验证：
 
-### 与LangChain集成
-
-```typescript
-import { AgentLLMService } from './src/core/llm/AgentLLMService';
-
-const agentLLM = new AgentLLMService({
-  enableCache: true,
-  autoModelSelection: true
-});
-
-// 使用LangChain兼容接口
-const response = await agentLLM.call([
-  { role: 'system', content: '你是一个市场分析专家' },
-  { role: 'user', content: '分析智能家居市场趋势' }
-]);
+```bash
+npm run analyze:adaptive -- --keyword "远程工作工具" --fast
 ```
 
 ## 文档
 
-详细文档请参考：
+详细文档请参考[docs](./docs)目录：
 
-- [增强LLM服务文档](docs/core/enhanced-llm-service.md)
-- [架构概述](docs/architecture/architecture.md)
-- [Agent协作机制](docs/architecture/agent-collaboration.md)
-- [状态共享机制](docs/development/state-sharing.md)
-- [错误恢复策略](docs/development/error-recovery.md)
-- [自适应调度](docs/development/adaptive-scheduling.md)
-- [API文档](docs/api/index.md)
-- [命令行使用](docs/usage/cli.md)
+- [API文档](./docs/api/README.md)
+- [架构设计](./docs/architecture/README.md)
+- [使用指南](./docs/usage/README.md)
+- [开发指南](./docs/development/README.md)
 
-## 贡献
+## 授权
 
-欢迎贡献代码、报告问题或提出新功能建议。请参考[贡献指南](CONTRIBUTING.md)。
+ISC许可证
 
-## 许可
+## 新特性：自适应问题发现
 
-本项目采用 MIT 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
+我们新添加了自适应问题发现功能，该功能通过机器学习方法自动调整探索策略和阈值，以更高效地发现高价值问题。
+
+### 主要特点
+
+- **自适应阈值调整**：根据问题质量分布动态调整质量阈值
+- **学习型探索策略**：通过多臂老虎机算法自动选择最优探索策略
+- **反馈驱动优化**：从Agent反馈中学习以改进决策
+- **多维度评估**：考虑证据质量、反馈一致性等多维度因素
+
+### 使用方法
+
+使用提供的脚本运行自适应问题发现：
+
+```bash
+./adaptive-discovery.sh '人工智能教育'
+```
+
+或者指定自定义配置文件：
+
+```bash
+./adaptive-discovery.sh '远程办公' ./configs/custom-config.json
+```
+
+### 配置选项
+
+在配置文件中可以自定义以下参数：
+
+```json
+{
+  "maxIterations": 3,
+  "maxProblems": 15,
+  "outputDir": "./output/adaptive-discovery",
+  "format": "markdown",
+  "language": "zh",
+  "trackAgents": true,
+  "adaptiveMode": true,
+  "learningRate": 0.05
+}
+```

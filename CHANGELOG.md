@@ -2,6 +2,38 @@
 
 本项目仅记录每个版本的重大变更。
 
+## [4.2.0] - 2025-05-10
+
+### ✨ 新功能
+
+- 新增SchemaValidator工具类，统一管理LLM输出的结构验证
+- 新增SchemaValidatedLLMProvider类，确保LLM输出符合预定义的Zod模式
+- 新增AgentLLMServiceExtensions类，为Agent提供便捷的Schema验证方法
+- 添加Zod schema到TypeScript接口的自动转换功能
+
+### 🔄 重构
+
+- 重构了Agent类的LLM响应处理逻辑，统一使用Schema验证
+- 重构MarketNeedExplorerAgent使用新的Schema验证系统
+- 重构OpportunityStrategistAgent使用新的Schema验证系统
+- 重构SolutionEvaluatorAgent使用新的Schema验证系统
+- 重构UserJourneySimulatorAgent使用新的Schema验证系统
+- 更新了LLMServiceHub中的formatMessages方法调用，修复了类型错误
+
+### 🐛 Bug修复
+
+- 修复了UserJourneySimulatorAgent中的Schema类型错误
+- 修复了SolutionEvaluatorAgent中的feedbackType类型错误
+- 修复了OpportunityStrategistAgent中的feedbackType类型错误
+- 修复了LLMServiceHub.ts中的API调用参数类型错误
+
+### 🛠️ 优化
+
+- 优化了LLM响应的错误处理逻辑
+- 添加了自动重试机制，当LLM输出不符合Schema时提供更清晰的指导
+- 增强了提示词，包含了TypeScript接口定义
+- 改进了验证失败时的默认值处理
+
 ## [4.1.0] - 2024-06-01
 
 ### 问题发现框架实现
@@ -214,3 +246,16 @@
 - 详细的功能使用文档：覆盖所有新功能的使用方法和最佳实践
 - 代码示例：提供完整的使用示例，方便快速上手
 - API参考：详细描述每个关键类和方法的功能与参数
+
+## [未发布]
+
+### 新增
+
+- 自适应问题发现系统
+  - 实现自适应阈值调整机制
+  - 添加学习型探索策略选择
+  - 支持从Agent反馈中学习以优化决策
+  - 多维度评估问题质量
+- 问题发现命令行工具
+  - 添加自适应问题发现脚本
+  - 添加问题发现配置文件支持
