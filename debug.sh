@@ -1,1 +1,0 @@
-/Users/leo/AIWeb/keywords/scripts/debug/debug-all.sh

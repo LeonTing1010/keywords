@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1ce5ce13-8942-4b12-8ad6-ad28c5591107",
+    "title": "远程办公导致的工作与生活界限模糊",
+    "description": "远程工作使得工作和个人生活的界限变得模糊，许多人发现自己难以\"下班\"，导致工作时间延长、休息不足和潜在的职业倦怠。",
+    "category": [
+      "工作生活平衡",
+      "心理健康"
+    ],
+    "source": "llm_analysis",
+    "evidence": [
+      {
+        "text": "LLM分析的问题，用户规模评分: 8，严重程度评分: 7",
+        "source": "llm_inference",
+        "type": "expert",
+        "confidence": 0.7
+      },
+      {
+        "text": "LLM分析的问题，用户规模评分: 9，严重程度评分: 8",
+        "source": "llm_inference",
+        "type": "expert",
+        "confidence": 0.8
+      },
+      {
+        "text": "LLM分析的问题，用户规模评分: 7，严重程度评分: 9",
+        "source": "llm_inference",
+        "type": "expert",
+        "confidence": 0.7
+      }
+    ],
+    "metadata": {
+      "userScale": 8,
+      "severity": 7,
+      "keyword": "远程办公",
+      "created": "2025-05-11T07:51:11.877Z"
+    }
+  }
+]

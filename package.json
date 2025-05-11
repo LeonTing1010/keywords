@@ -1,19 +1,16 @@
 {
-  "name": "keyword-pioneer",
+  "name": "keyword-alchemist",
   "version": "1.1.0",
-  "description": "智能多Agent协作发现高价值市场机会与未满足需求系统",
-  "main": "src/cli/ProblemDiscoveryCli.ts",
+  "description": "🧪 智能多Agent协作系统：将普通关键词转化为高价值商业洞察与未解决问题",
+  "main": "",
   "scripts": {
-    "analyze:adaptive": "ts-node src/cli/AdaptiveCli.ts",
-    "analyze:problem-discovery": "ts-node src/cli/ProblemDiscoveryCli.ts",
-    "test": "jest",
     "build": "tsc",
-    "build:debug": "tsc --skipLibCheck",
-    "server": "./scripts/run-server.sh",
-    "server:daemon": "./scripts/run-server.sh -d",
-    "report:agent-tracking": "ts-node scripts/analyze/agent-tracker-report.ts",
-    "report:agent-tracking:html": "ts-node scripts/analyze/agent-tracker-report.ts --format html --output ./output/agent-report.html",
-    "adaptive-discovery": "ts-node scripts/run-adaptive-discovery.ts"
+    "explore": "ts-node src/cli/index.ts",
+    "keywords": "ts-node src/cli/index.ts",
+    "discover": "ts-node src/cli/index.ts discover",
+    "batch": "ts-node src/cli/index.ts batch",
+    "test": "jest",
+    "test:simple": "ts-node src/test/simple-workflow.ts"
   },
   "keywords": [
     "keyword-discovery",
@@ -35,6 +32,8 @@
     "@types/pino-multi-stream": "^5.1.6",
     "@types/uuid": "^10.0.0",
     "axios": "^1.9.0",
+    "chalk": "^4.1.2",
+    "commander": "^10.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
@@ -42,6 +41,7 @@
     "langchain": "^0.1.9",
     "langchain-core": "^0.0.4",
     "node-fetch": "^2.7.0",
+    "ora": "^5.4.1",
     "pino": "^9.6.0",
     "pino-daily-rotate-file": "^0.0.1",
     "pino-multi-stream": "^6.0.0",
@@ -53,7 +53,7 @@
     "typescript": "^5.0.0",
     "uuid": "^11.1.0",
     "yargs": "^17.7.2",
-    "zod": "^3.22.4"
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2018",
-    "module": "commonjs",
+    "module": "CommonJS",
     "esModuleInterop": true,
     "moduleResolution": "node",
     "outDir": "./dist",
@@ -14,8 +14,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": "./",
     "paths": {
-      "*": ["node_modules/*", "src/types/*"]
-    }
+      "*": ["node_modules/*", "src/types/*"],
+    },
+    "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
